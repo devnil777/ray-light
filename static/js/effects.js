@@ -120,5 +120,34 @@ export const effects = {
             }
             return { imageData, status: "Clipping (R:High, B:Low)" };
         }
+    },
+
+    focus_peaking: {
+        name: "Зоны фокуса",
+        params: [
+            { name: "threshold", type: "number", default: 30, min: 0, max: 255 }
+        ],
+        apply: (imageData, params) => {
+            // Logic moved to worker
+            return { imageData, status: "Focus Peaking" };
+        }
+    },
+
+    histogram: {
+        name: "Гистограмма",
+        params: [],
+        apply: (imageData, params) => {
+            // Logic moved to worker
+            return { imageData, status: "Histogram" };
+        }
+    },
+
+    itten_circle: {
+        name: "Круг Иттена",
+        params: [],
+        apply: (imageData, params) => {
+            // Logic moved to worker
+            return { imageData, status: "Itten Circle" };
+        }
     }
 };
