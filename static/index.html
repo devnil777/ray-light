@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ray-Light | Photo Audit</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- FontAwesome for icons (optional, but requested for style) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- SortableJS for drag and drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body class="theme-dark bg-3">
+    <div id="app">
+        <main id="workspace">
+            <div id="grid-container" class="grid-1">
+                <!-- Images will be injected here -->
+            </div>
+
+            <div id="status-bar">
+                <div id="file-info">File: <span id="current-filename">-</span></div>
+                <div id="zoom-info">Zoom: <span id="current-zoom">100</span>%</div>
+                <div id="navigation-controls">
+                    <button id="prev-btn" title="Previous (Left Arrow)"><i class="fas fa-chevron-left"></i></button>
+                    <span id="index-info">0 / 0</span>
+                    <button id="next-btn" title="Next (Right Arrow)"><i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </main>
+
+        <div id="resizer"></div>
+
+        <aside id="sidebar">
+            <section class="panel">
+                <h3><i class="fas fa-cog"></i> Основные настройки</h3>
+                <div class="control-group">
+                    <label>Фон рабочей области</label>
+                    <div class="bg-picker">
+                        <div class="bg-swatch bg-0" data-bg="0" title="White"></div>
+                        <div class="bg-swatch bg-1" data-bg="1"></div>
+                        <div class="bg-swatch bg-2" data-bg="2"></div>
+                        <div class="bg-swatch bg-3" data-bg="3"></div>
+                        <div class="bg-swatch bg-4" data-bg="4"></div>
+                        <div class="bg-swatch bg-5" data-bg="5" title="Black"></div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Ориентация</label>
+                    <div class="btn-group">
+                        <button id="rotate-90" title="Rotate 90°"><i class="fas fa-redo"></i></button>
+                        <button id="flip-h" title="Flip Horizontal"><i class="fas fa-arrows-alt-h"></i></button>
+                        <button id="flip-v" title="Flip Vertical"><i class="fas fa-arrows-alt-v"></i></button>
+                        <button id="reset-view" title="Reset View"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Сетка</label>
+                    <select id="grid-select">
+                        <option value="1">1 (Single)</option>
+                        <option value="2x2">2x2 (4 Cells)</option>
+                        <option value="3x2">3x2 (6 Cells)</option>
+                        <option value="3x3">3x3 (9 Cells)</option>
+                    </select>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h3><i class="fas fa-magic"></i> Список эффектов</h3>
+                <ul id="active-effects" class="sortable-list">
+                    <!-- Active effects will be here -->
+                </ul>
+                <div class="info-text" id="effect-limit-msg" style="display: none;">
+                    Достигнут предел эффектов для выбранной сетки
+                </div>
+            </section>
+
+            <section class="panel">
+                <h3><i class="fas fa-plus-circle"></i> Доступные эффекты</h3>
+                <div id="available-effects" class="effect-palette">
+                    <!-- Palette of effects to add -->
+                </div>
+            </section>
+        </aside>
+    </div>
+
+    <!-- Modals or overlays if needed -->
+    <div id="loader" class="hidden">
+        <i class="fas fa-spinner fa-spin"></i>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
