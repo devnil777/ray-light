@@ -12,7 +12,7 @@ class RayLightApp {
         this.flipV = 1;
         this.gridType = '1';
         this.activeEffects = [];
-        this.cache = new Map(); // filename -> effectIndex -> HTMLCanvasElement
+        this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.workers = [];
         this.workerCount = navigator.hardwareConcurrency || 4;
         this.taskQueue = [];
@@ -360,9 +360,18 @@ class RayLightApp {
         // Check cache
         const cacheKey = `${filename}_${effectIdx}`;
         if (this.cache.has(cacheKey)) {
-            const cachedCanvas = this.cache.get(cacheKey);
-            this.copyCanvas(cachedCanvas, targetCanvas);
-            if (statusEl) statusEl.textContent = 'from cache';
+            const cached = this.cache.get(cacheKey);
+            this.copyCanvas(cached.canvas, targetCanvas);
+            if (statusEl) statusEl.textContent = cached.status + ' (cache)';
+
+            if (effect.type === 'itten_circle' && cached.status.includes('Itten Circle:')) {
+                this.drawIttenPercentages(targetCanvas, cached.status);
+            }
+
+            if (this.zoomMode === 'auto') {
+                this.applyTransform();
+                this.updateUI();
+            }
             return;
         }
 
@@ -380,7 +389,7 @@ class RayLightApp {
             const result = await this.runWorker(imageData, effect.type, effect.params);
 
             offscreen.getContext('2d').putImageData(result.imageData, 0, 0);
-            this.cache.set(cacheKey, offscreen);
+            this.cache.set(cacheKey, { canvas: offscreen, status: result.status });
 
             this.copyCanvas(offscreen, targetCanvas);
             if (statusEl) statusEl.textContent = result.status;
@@ -455,13 +464,14 @@ class RayLightApp {
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'black';
-        ctx.shadowBlur = 4;
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 3;
 
         for (let i = 0; i < 12; i++) {
             const angle = (i * 30 + 15) * Math.PI / 180 - Math.PI / 2;
             const x = centerX + Math.cos(angle) * radius;
             const y = centerY + Math.sin(angle) * radius;
+            ctx.strokeText(`${percents[i]}%`, x, y);
             ctx.fillText(`${percents[i]}%`, x, y);
         }
     }
