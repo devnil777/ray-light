@@ -6,6 +6,7 @@ class RayLightApp {
         this.currentIndex = 0;
         this.zoom = 1;
         this.pan = { x: 0, y: 0 };
+        this.zoomMode = 'auto'; // 'auto' or 'manual'
         this.rotation = 0;
         this.flipH = 1;
         this.flipV = 1;
@@ -42,24 +43,6 @@ class RayLightApp {
             worker.onmessage = (e) => this.handleWorkerMessage(e.data);
             this.workers.push({ worker, busy: false });
         }
-    }
-
-    initElements() {
-        this.els = {
-            workspace: document.getElementById('workspace'),
-            gridContainer: document.getElementById('grid-container'),
-            sidebar: document.getElementById('sidebar'),
-            resizer: document.getElementById('resizer'),
-            gridSelect: document.getElementById('grid-select'),
-            activeEffectsList: document.getElementById('active-effects'),
-            palette: document.getElementById('available-effects'),
-            filenameInfo: document.getElementById('current-filename'),
-            zoomInfo: document.getElementById('current-zoom'),
-            indexInfo: document.getElementById('index-info'),
-            prevBtn: document.getElementById('prev-btn'),
-            nextBtn: document.getElementById('next-btn'),
-            effectLimitMsg: document.getElementById('effect-limit-msg')
-        };
     }
 
     initEventListeners() {
@@ -128,6 +111,7 @@ class RayLightApp {
         // Zoom & Pan
         this.els.gridContainer.addEventListener('wheel', (e) => {
             e.preventDefault();
+            this.zoomMode = 'manual';
             const delta = e.deltaY > 0 ? 0.9 : 1.1;
             this.zoom *= delta;
             this.zoom = Math.max(0.1, Math.min(10, this.zoom));
@@ -145,11 +129,20 @@ class RayLightApp {
         });
         window.addEventListener('mousemove', (e) => {
             if (!isPanning) return;
+            this.zoomMode = 'manual';
             this.pan.x = e.clientX - startPan.x;
             this.pan.y = e.clientY - startPan.y;
             this.applyTransform();
+            this.updateUI();
         });
         window.addEventListener('mouseup', () => isPanning = false);
+
+        // Double click to reset to auto
+        this.els.gridContainer.addEventListener('dblclick', () => {
+            this.zoomMode = 'auto';
+            this.applyTransform();
+            this.updateUI();
+        });
 
         // Sortable
         new Sortable(this.els.activeEffectsList, {
@@ -162,6 +155,32 @@ class RayLightApp {
                 this.saveSettings();
             }
         });
+    }
+
+    initElements() {
+        this.els = {
+            workspace: document.getElementById('workspace'),
+            gridContainer: document.getElementById('grid-container'),
+            sidebar: document.getElementById('sidebar'),
+            resizer: document.getElementById('resizer'),
+            gridSelect: document.getElementById('grid-select'),
+            activeEffectsList: document.getElementById('active-effects'),
+            palette: document.getElementById('available-effects'),
+            filenameInfo: document.getElementById('current-filename'),
+            zoomInfo: document.getElementById('current-zoom'),
+            indexInfo: document.getElementById('index-info'),
+            prevBtn: document.getElementById('prev-btn'),
+            nextBtn: document.getElementById('next-btn'),
+            effectLimitMsg: document.getElementById('effect-limit-msg')
+        };
+
+        // Add a message about auto/manual mode
+        const zoomHint = document.createElement('div');
+        zoomHint.style.fontSize = '10px';
+        zoomHint.style.color = '#888';
+        zoomHint.style.marginTop = '2px';
+        zoomHint.textContent = 'Зум/панорама: ручной режим. Двойной клик: авто.';
+        this.els.zoomInfo.parentElement.appendChild(zoomHint);
     }
 
     initPalette() {
@@ -365,6 +384,17 @@ class RayLightApp {
 
             this.copyCanvas(offscreen, targetCanvas);
             if (statusEl) statusEl.textContent = result.status;
+
+            if (effect.type === 'itten_circle' && result.status.includes('Itten Circle:')) {
+                this.drawIttenPercentages(targetCanvas, result.status);
+            }
+
+            // If we are in auto mode, we might need to re-apply transform
+            // since image dimensions might have changed
+            if (this.zoomMode === 'auto') {
+                this.applyTransform();
+                this.updateUI();
+            }
         } catch (e) {
             console.error(e);
             if (statusEl) statusEl.textContent = 'error';
@@ -414,6 +444,28 @@ class RayLightApp {
         }
     }
 
+    drawIttenPercentages(canvas, status) {
+        const ctx = canvas.getContext('2d');
+        const percents = status.split(': ')[1].split('% ').map(s => s.replace('%', ''));
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(canvas.width, canvas.height) * 0.3;
+
+        ctx.font = `${Math.max(12, canvas.width / 40)}px Arial`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+
+        for (let i = 0; i < 12; i++) {
+            const angle = (i * 30 + 15) * Math.PI / 180 - Math.PI / 2;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
+            ctx.fillText(`${percents[i]}%`, x, y);
+        }
+    }
+
     copyCanvas(src, dest) {
         dest.width = src.width;
         dest.height = src.height;
@@ -423,9 +475,23 @@ class RayLightApp {
 
     applyTransform() {
         const count = this.getGridCount();
+        const container = document.querySelector('.canvas-container');
+        if (!container) return;
+
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+
         for (let i = 0; i < count; i++) {
             const canvas = document.getElementById(`canvas-${i}`);
             if (canvas) {
+                if (this.zoomMode === 'auto') {
+                    const scaleX = containerWidth / canvas.width;
+                    const scaleY = containerHeight / canvas.height;
+                    const scale = Math.min(scaleX, scaleY);
+                    this.zoom = scale;
+                    this.pan = { x: 0, y: 0 };
+                }
+
                 canvas.style.transform = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
             }
         }
@@ -434,7 +500,7 @@ class RayLightApp {
     updateUI() {
         this.els.filenameInfo.textContent = this.images[this.currentIndex] || '-';
         this.els.indexInfo.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
-        this.els.zoomInfo.textContent = Math.round(this.zoom * 100);
+        this.els.zoomInfo.textContent = `${Math.round(this.zoom * 100)} [${this.zoomMode}]`;
     }
 
     clearCache() {
