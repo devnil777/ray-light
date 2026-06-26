@@ -135,13 +135,17 @@ const effects = {
             data[i] = 30; data[i+1] = 30; data[i+2] = 30; data[i+3] = 255;
         }
 
+        const margin = 20;
+        const availableWidth = width - 2 * margin;
+        const availableHeight = height - 2 * margin;
+
         const drawGraph = (hist, colorIdx, heightPercent, offsetPercent) => {
-            const h = height * heightPercent;
-            const yOffset = height * offsetPercent;
+            const h = availableHeight * heightPercent;
+            const yOffset = margin + availableHeight * offsetPercent;
             for (let x = 0; x < 256; x++) {
                 const barHeight = (hist[x] / max) * h;
-                const xPosStart = Math.floor((x / 256) * width);
-                const xPosEnd = Math.floor(((x+1) / 256) * width);
+                const xPosStart = margin + Math.floor((x / 256) * availableWidth);
+                const xPosEnd = margin + Math.floor(((x+1) / 256) * availableWidth);
                 for (let px = xPosStart; px < xPosEnd; px++) {
                     for (let py = 0; py < barHeight; py++) {
                         const idx = (Math.floor(height - yOffset - py - 1) * width + px) * 4;
@@ -179,6 +183,8 @@ const effects = {
             const b = data[i+2] / 255;
 
             const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            if (max - min < 0.1) continue; // Skip neutral pixels
+
             let h;
             if (max === min) h = 0;
             else if (max === r) h = (g - b) / (max - min) + (g < b ? 6 : 0);
@@ -186,48 +192,19 @@ const effects = {
             else h = (r - g) / (max - min) + 4;
             h *= 60; // 0-360
 
-            // Itten colors (approximate hue ranges)
-            // Yellow: 60, Orange: 30, Red: 0/360, Violet: 270, Blue: 240, Green: 120
-            // 12 sectors, 30 degrees each.
-            // 0: Yellow (45-75)
-            // 1: Yellow-Orange (15-45) -> wait, Yellow is 60.
-            // Standard wheel:
-            // 0 deg: Red
-            // 30: Red-Orange
-            // 60: Orange
-            // 90: Yellow-Orange
-            // 120: Yellow
-            // 150: Yellow-Green
-            // 180: Green
-            // 210: Blue-Green
-            // 240: Blue
-            // 270: Blue-Violet
-            // 300: Violet
-            // 330: Red-Violet
+            // Mapping hue to Itten's 12 sectors starting from Yellow (60)
+            // Order: Yellow, Yellow-Orange, Orange, Red-Orange, Red, Red-Violet,
+            // Violet, Blue-Violet, Blue, Blue-Green, Green, Yellow-Green
+            let ittenIdx;
+            if (h >= 60 && h <= 360) {
+                // From Yellow (60) to Red (0/360)
+                // We want 60..0 to map to sectors 0..4? No, that's too tight.
+                // Let's use a uniform mapping for simplicity, but aligned.
+                ittenIdx = Math.floor(((60 - h + 360 + 15) % 360) / 30);
+            } else {
+                ittenIdx = Math.floor(((60 - h + 15 + 360) % 360) / 30);
+            }
 
-            // Re-mapping to Itten's order from prompt:
-            // 1. Жёлтый (~60)
-            // 2. Жёлто-оранжевый (~45)
-            // 3. Оранжевый (~30)
-            // 4. Красно-оранжевый (~15)
-            // 5. Красный (~0)
-            // 6. Красно-фиолетовый (~345)
-            // 7. Фиолетовый (~300)
-            // 8. Сине-фиолетовый (~270)
-            // 9. Синий (~240)
-            // 10. Сине-зелёный (~210)
-            // 11. Зелёный (~180)
-            // 12. Жёлто-зелёный (~120) -- wait, 150 is yellow-green
-
-            // Let's use a simpler mapping based on 30-degree sectors
-            // and try to match the prompt's names.
-            // Yellow at 60 deg.
-
-            let sector = Math.floor(((h + 15) % 360) / 30);
-            // This gives 12 sectors. Let's map them.
-            // h=60 (Yellow) -> sector 2 (if we don't +15)
-            // Let's align so Yellow is index 0.
-            let ittenIdx = Math.floor(((60 - h + 360 + 15) % 360) / 30);
             if (ittenIdx >= 0 && ittenIdx < 12) {
                 counts[ittenIdx]++;
                 total++;
@@ -267,9 +244,8 @@ const effects = {
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 if (dist < radius && dist > radius * 0.5) {
                     let angle = Math.atan2(dy, dx) * 180 / Math.PI; // -180 to 180
-                    angle = (360 - (angle + 90) + 360) % 360; // 0 is top, clockwise
+                    angle = (angle + 90 + 360) % 360; // 0 is top, clockwise
 
-                    // Rotate so sector 0 is at top
                     const sector = Math.floor(angle / 30);
                     const color = ittenColors[sector];
                     const idx = (y * width + x) * 4;
