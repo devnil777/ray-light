@@ -460,12 +460,19 @@ class RayLightApp {
         const centerY = canvas.height / 2;
         const radius = Math.min(canvas.width, canvas.height) * 0.3;
 
-        ctx.font = `${Math.max(12, canvas.width / 40)}px Arial`;
+        ctx.font = `bold ${Math.max(14, canvas.width / 35)}px Arial`;
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+
+        // Shadow for better readability
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
         ctx.strokeStyle = 'black';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4;
 
         for (let i = 0; i < 12; i++) {
             const angle = (i * 30 + 15) * Math.PI / 180 - Math.PI / 2;
@@ -474,6 +481,11 @@ class RayLightApp {
             ctx.strokeText(`${percents[i]}%`, x, y);
             ctx.fillText(`${percents[i]}%`, x, y);
         }
+
+        // Reset shadow
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
     }
 
     copyCanvas(src, dest) {
@@ -494,15 +506,25 @@ class RayLightApp {
         for (let i = 0; i < count; i++) {
             const canvas = document.getElementById(`canvas-${i}`);
             if (canvas) {
-                if (this.zoomMode === 'auto') {
+                const effect = this.activeEffects[i];
+                const isAnalysis = effect && (effect.type === 'histogram' || effect.type === 'itten_circle');
+
+                if (isAnalysis || this.zoomMode === 'auto') {
                     const scaleX = containerWidth / canvas.width;
                     const scaleY = containerHeight / canvas.height;
                     const scale = Math.min(scaleX, scaleY);
-                    this.zoom = scale;
-                    this.pan = { x: 0, y: 0 };
-                }
 
-                canvas.style.transform = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                    if (isAnalysis) {
+                        // Analysis effects are always centered and fitted, ignoring manual zoom/pan/rotation
+                        canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
+                    } else {
+                        this.zoom = scale;
+                        this.pan = { x: 0, y: 0 };
+                        canvas.style.transform = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                    }
+                } else {
+                    canvas.style.transform = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                }
             }
         }
     }
