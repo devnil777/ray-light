@@ -23,6 +23,7 @@ class RayLightApp {
         this._prevLayout = null;
         this.originalAspect = null;
         this.favorites = new Set();
+        this.autoFitScale = null;
  
         this.init();
     }
@@ -161,7 +162,11 @@ class RayLightApp {
             this.zoomMode = 'manual';
             const delta = e.deltaY > 0 ? 0.9 : 1.1;
             this.zoom *= delta;
-            this.zoom = Math.max(0.1, Math.min(10, this.zoom));
+            const minZoom = Math.min(0.1, this.autoFitScale || 0.1);
+            this.zoom = Math.max(minZoom, Math.min(10, this.zoom));
+            if (this.autoFitScale !== null && this.zoom === this.autoFitScale) {
+                this.zoomMode = 'auto';
+            }
             this.applyTransform();
             this.updateUI();
         }, { passive: false });
@@ -214,6 +219,7 @@ class RayLightApp {
             activeEffectsList: document.getElementById('active-effects'),
             palette: document.getElementById('available-effects'),
             filenameInfo: document.getElementById('current-filename'),
+
             zoomInfo: document.getElementById('zoom-info'),
             indexInfo: document.getElementById('index-info'),
             favBtn: document.getElementById('fav-btn'),
@@ -254,26 +260,37 @@ class RayLightApp {
 
     computeGridLayout() {
         const n = this.activeEffects.length;
-        if (n <= 0) return { cols: 1, rows: 1, total: 1 };
-        if (n === 1) return { cols: 1, rows: 1, total: 1 };
+        if (n <= 0) return { cols: 1, rows: 1, total: 1, rowLayout: null };
+        if (n === 1) return { cols: 1, rows: 1, total: 1, rowLayout: null };
+
+        const candidates = [];
+
+        for (let cols = 1; cols <= 9; cols++) {
+            for (let rows = 1; rows <= 9; rows++) {
+                if (cols * rows < n || cols * rows > 9) continue;
+                candidates.push({ cols, rows, total: cols * rows, rowLayout: null });
+            }
+        }
+
+        for (let a = Math.ceil(n / 2); a < n; a++) {
+            const b = n - a;
+            candidates.push({ cols: a, rows: 2, total: n, rowLayout: [a, b] });
+        }
 
         const ar = this.currentImageAspect;
         if (!ar) {
             let best = null;
-            for (let cols = 1; cols <= 9; cols++) {
-                for (let rows = 1; rows <= 9; rows++) {
-                    if (cols * rows < n || cols * rows > 9) continue;
-                    const waste = cols * rows - n;
-                    const balanced = Math.abs(cols - rows);
-                    const preferCols = cols >= rows;
-                    if (!best || waste < best.waste ||
-                        (waste === best.waste && preferCols && !best.preferCols) ||
-                        (waste === best.waste && preferCols === best.preferCols && balanced < best.balanced)) {
-                        best = { cols, rows, total: cols * rows, waste, balanced, preferCols };
-                    }
+            for (const c of candidates) {
+                const waste = c.total - n;
+                const balanced = Math.abs(c.cols - c.rows);
+                const preferCols = c.cols >= c.rows;
+                if (!best || waste < best.waste ||
+                    (waste === best.waste && preferCols && !best.preferCols) ||
+                    (waste === best.waste && preferCols === best.preferCols && balanced < best.balanced)) {
+                    best = { ...c, waste, balanced, preferCols };
                 }
             }
-            return best || { cols: 1, rows: 1, total: 1 };
+            return best || { cols: 1, rows: 1, total: 1, rowLayout: null };
         }
 
         const availW = this.els.workspace.clientWidth - 20;
@@ -281,36 +298,47 @@ class RayLightApp {
         const availH = this.els.workspace.clientHeight - statusBar.clientHeight - 20;
         const wsAr = availW / availH;
 
+        if (availW <= 0 || availH <= 0) {
+            let best = null;
+            for (const c of candidates) {
+                const waste = c.total - n;
+                const balanced = Math.abs(c.cols - c.rows);
+                const preferCols = c.cols >= c.rows;
+                if (!best || waste < best.waste ||
+                    (waste === best.waste && preferCols && !best.preferCols) ||
+                    (waste === best.waste && preferCols === best.preferCols && balanced < best.balanced)) {
+                    best = { ...c, waste, balanced, preferCols };
+                }
+            }
+            return best || { cols: 1, rows: 1, total: 1, rowLayout: null };
+        }
+
         let best = null;
         let bestCoverage = -1;
 
-        for (let cols = 1; cols <= 9; cols++) {
-            for (let rows = 1; rows <= 9; rows++) {
-                if (cols * rows < n || cols * rows > 9) continue;
+        for (const c of candidates) {
+            const gridAr = (ar * c.cols) / c.rows;
+            let gridW, gridH;
+            if (gridAr > wsAr) {
+                gridW = availW;
+                gridH = availW / gridAr;
+            } else {
+                gridH = availH;
+                gridW = availH * gridAr;
+            }
 
-                const gridAr = (ar * cols) / rows;
-                let gridW, gridH;
-                if (gridAr > wsAr) {
-                    gridW = availW;
-                    gridH = availW / gridAr;
-                } else {
-                    gridH = availH;
-                    gridW = availH * gridAr;
-                }
+            const cellW = gridW / c.cols;
+            const cellH = gridH / c.rows;
+            const scale = Math.min(cellW / ar, cellH);
+            const coverage = n * ar * scale * scale;
 
-                const cellW = gridW / cols;
-                const cellH = gridH / rows;
-                const scale = Math.min(cellW / ar, cellH);
-                const coverage = n * ar * scale * scale;
-
-                if (coverage > bestCoverage) {
-                    bestCoverage = coverage;
-                    best = { cols, rows, total: cols * rows };
-                }
+            if (coverage > bestCoverage) {
+                bestCoverage = coverage;
+                best = c;
             }
         }
 
-        return best || { cols: 1, rows: 1, total: 1 };
+        return best || { cols: 1, rows: 1, total: 1, rowLayout: null };
     }
 
     renderGrid() {
@@ -319,24 +347,47 @@ class RayLightApp {
         const count = Math.max(this.activeEffects.length, 1);
         const gap = 10;
 
-        const cellWidth = `calc((100% - ${(layout.cols - 1) * gap}px) / ${layout.cols})`;
         const cellHeight = `calc((100% - ${(layout.rows - 1) * gap}px) / ${layout.rows})`;
+        const cellWidth = `calc((100% - ${(layout.cols - 1) * gap}px) / ${layout.cols})`;
 
-        for (let i = 0; i < count; i++) {
-            const cell = document.createElement('div');
-            cell.className = 'grid-cell';
-            cell.style.width = cellWidth;
-            cell.style.height = cellHeight;
-            cell.innerHTML = `
-                <div class="canvas-container" id="container-${i}">
-                    <canvas id="canvas-${i}"></canvas>
-                </div>
-                <div class="cell-status" id="status-${i}">
-                    <span class="effect-name">-</span>
-                    <span class="process-info"></span>
-                </div>
-            `;
-            this.els.gridContainer.appendChild(cell);
+        if (layout.rowLayout) {
+            let cellIdx = 0;
+            for (let ri = 0; ri < layout.rowLayout.length; ri++) {
+                const rowCols = layout.rowLayout[ri];
+                for (let ci = 0; ci < rowCols && cellIdx < count; ci++, cellIdx++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.style.width = cellWidth;
+                    cell.style.height = cellHeight;
+                    cell.innerHTML = `
+                        <div class="canvas-container" id="container-${cellIdx}">
+                            <canvas id="canvas-${cellIdx}"></canvas>
+                        </div>
+                        <div class="cell-status" id="status-${cellIdx}">
+                            <span class="effect-name">-</span>
+                            <span class="process-info"></span>
+                        </div>
+                    `;
+                    this.els.gridContainer.appendChild(cell);
+                }
+            }
+        } else {
+            for (let i = 0; i < count; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                cell.style.width = cellWidth;
+                cell.style.height = cellHeight;
+                cell.innerHTML = `
+                    <div class="canvas-container" id="container-${i}">
+                        <canvas id="canvas-${i}"></canvas>
+                    </div>
+                    <div class="cell-status" id="status-${i}">
+                        <span class="effect-name">-</span>
+                        <span class="process-info"></span>
+                    </div>
+                `;
+                this.els.gridContainer.appendChild(cell);
+            }
         }
         this.updateGridSize();
         this.applyTransform();
@@ -345,8 +396,11 @@ class RayLightApp {
     recomputeLayout() {
         const layout = this.computeGridLayout();
         const count = Math.max(this.activeEffects.length, 1);
-        const currentCells = this.els.gridContainer.children.length;
-        const sameGrid = this._prevLayout && this._prevLayout.cols === layout.cols && this._prevLayout.rows === layout.rows;
+        const currentCells = this.els.gridContainer.querySelectorAll('.grid-cell').length;
+        const sameGrid = this._prevLayout &&
+            this._prevLayout.cols === layout.cols &&
+            this._prevLayout.rows === layout.rows &&
+            JSON.stringify(this._prevLayout.rowLayout) === JSON.stringify(layout.rowLayout);
         const sameCount = currentCells === count;
 
         if (sameGrid && sameCount) {
@@ -355,7 +409,7 @@ class RayLightApp {
             return false;
         } else {
             this.renderGrid();
-            this._prevLayout = { cols: layout.cols, rows: layout.rows };
+            this._prevLayout = { cols: layout.cols, rows: layout.rows, rowLayout: layout.rowLayout };
             return true;
         }
     }
@@ -698,35 +752,34 @@ class RayLightApp {
 
     applyTransform() {
         const count = Math.max(this.activeEffects.length, 1);
-        const container = document.querySelector('.canvas-container');
-        if (!container) return;
-
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
 
         for (let i = 0; i < count; i++) {
             const canvas = document.getElementById(`canvas-${i}`);
-            if (canvas) {
-                const effect = this.activeEffects[i];
-                const isAnalysis = effect && effects[effect.type]?.analysis;
+            const container = document.getElementById(`container-${i}`);
+            if (!canvas || !container) continue;
 
-                if (isAnalysis || this.zoomMode === 'auto') {
-                    const scaleX = containerWidth / canvas.width;
-                    const scaleY = containerHeight / canvas.height;
-                    const scale = Math.min(scaleX, scaleY);
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            const effect = this.activeEffects[i];
+            const isAnalysis = effect && effects[effect.type]?.analysis;
 
-                    if (isAnalysis) {
-                        canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
-                    } else {
-                        this.zoom = scale;
-                        this.pan = { x: 0, y: 0 };
-                        const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
-                        canvas.style.transform = t;
-                    }
+            if (isAnalysis || this.zoomMode === 'auto') {
+                const scaleX = containerWidth / canvas.width;
+                const scaleY = containerHeight / canvas.height;
+                const scale = Math.min(scaleX, scaleY);
+
+                if (isAnalysis) {
+                    canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
                 } else {
+                    this.autoFitScale = scale;
+                    this.zoom = scale;
+                    this.pan = { x: 0, y: 0 };
                     const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
                     canvas.style.transform = t;
                 }
+            } else {
+                const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                canvas.style.transform = t;
             }
         }
     }
