@@ -15,7 +15,7 @@ class RayLightApp {
         this.activeEffects = [];
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.workers = [];
-        this.workerCount = navigator.hardwareConcurrency || 4;
+        this.workerCount = 1; // Strictly sequential processing to save memory
         this.taskQueue = [];
         this.activeTasks = new Map();
 
@@ -403,17 +403,14 @@ class RayLightApp {
         if (statusEl) statusEl.textContent = 'обработка...';
 
         try {
-            const img = await this.loadImageFile(filename);
+            const result = await this.runWorker(filename, effect.type, effect.params);
+            if (!result) throw new Error("Processing failed");
+
             const offscreen = document.createElement('canvas');
-            offscreen.width = img.width;
-            offscreen.height = img.height;
-            const ctx = offscreen.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const imageData = ctx.getImageData(0, 0, img.width, img.height);
-
-            const result = await this.runWorker(imageData, effect.type, effect.params);
-
+            offscreen.width = result.imageData.width;
+            offscreen.height = result.imageData.height;
             offscreen.getContext('2d').putImageData(result.imageData, 0, 0);
+
             this.cache.set(cacheKey, { canvas: offscreen, status: result.status });
 
             this.copyCanvas(offscreen, targetCanvas);
@@ -444,26 +441,44 @@ class RayLightApp {
         });
     }
 
-    runWorker(imageData, effectType, params) {
+    runWorker(filename, effectType, params) {
         return new Promise((resolve) => {
             const taskId = Math.random();
-            this.taskQueue.push({ imageData, effectType, params, taskId, resolve });
+            // Store request details instead of ImageData to prevent memory spikes
+            this.taskQueue.push({ filename, effectType, params, taskId, resolve });
             this.processQueue();
         });
     }
 
-    processQueue() {
+    async processQueue() {
         const availableWorker = this.workers.find(w => !w.busy);
         if (availableWorker && this.taskQueue.length > 0) {
             const task = this.taskQueue.shift();
             availableWorker.busy = true;
-            this.activeTasks.set(task.taskId, { resolve: task.resolve, worker: availableWorker });
-            availableWorker.worker.postMessage({
-                imageData: task.imageData,
-                effectType: task.effectType,
-                params: task.params,
-                taskId: task.taskId
-            }, [task.imageData.data.buffer]);
+
+            try {
+                // Load and prepare image data ONLY when worker is ready
+                const img = await this.loadImageFile(task.filename);
+                const offscreen = document.createElement('canvas');
+                offscreen.width = img.width;
+                offscreen.height = img.height;
+                const ctx = offscreen.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, img.width, img.height);
+
+                this.activeTasks.set(task.taskId, { resolve: task.resolve, worker: availableWorker });
+                availableWorker.worker.postMessage({
+                    imageData: imageData,
+                    effectType: task.effectType,
+                    params: task.params,
+                    taskId: task.taskId
+                }, [imageData.data.buffer]);
+            } catch (e) {
+                console.error("Task failed", e);
+                availableWorker.busy = false;
+                task.resolve(null);
+                this.processQueue();
+            }
         }
     }
 
