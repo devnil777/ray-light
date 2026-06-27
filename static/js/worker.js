@@ -218,15 +218,8 @@ const effects = {
             // Mapping hue to Itten's 12 sectors starting from Yellow (60)
             // Order: Yellow, Yellow-Orange, Orange, Red-Orange, Red, Red-Violet,
             // Violet, Blue-Violet, Blue, Blue-Green, Green, Yellow-Green
-            let ittenIdx;
-            if (h >= 60 && h <= 360) {
-                // From Yellow (60) to Red (0/360)
-                // We want 60..0 to map to sectors 0..4? No, that's too tight.
-                // Let's use a uniform mapping for simplicity, but aligned.
-                ittenIdx = Math.floor(((60 - h + 360 + 15) % 360) / 30);
-            } else {
-                ittenIdx = Math.floor(((60 - h + 15 + 360) % 360) / 30);
-            }
+            // Uniform mapping for simplicity, aligned to Itten's sectors.
+            let ittenIdx = Math.floor(((60 - h + 360 + 15) % 360) / 30);
 
             if (ittenIdx >= 0 && ittenIdx < 12) {
                 counts[ittenIdx]++;
@@ -288,8 +281,120 @@ const effects = {
 
         const statusStr = "Круг Иттена: " + percents.join("% ") + "%";
         return { imageData, status: statusStr };
+    },
+
+    texture_loss: (imageData, params) => {
+        const data = imageData.data;
+        const width = imageData.width;
+        const height = imageData.height;
+        const windowSize = parseInt(params.windowSize || 15);
+        const half = Math.floor(windowSize / 2);
+
+        // === ШАГ 1: Перевод в серый + Гауссово размытие 3x3 ===
+        const grayRaw = new Float32Array(width * height);
+        for (let i = 0; i < data.length; i += 4) {
+            grayRaw[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        }
+
+        const gray = new Float32Array(width * height);
+        for (let y = 1; y < height - 1; y++) {
+            for (let x = 1; x < width - 1; x++) {
+                const idx = y * width + x;
+                gray[idx] = (
+                    grayRaw[idx - width - 1] + 2 * grayRaw[idx - width] + grayRaw[idx - width + 1] +
+                    2 * grayRaw[idx - 1]     + 4 * grayRaw[idx]       + 2 * grayRaw[idx + 1] +
+                    grayRaw[idx + width - 1] + 2 * grayRaw[idx + width] + grayRaw[idx + width + 1]
+                ) / 16;
+            }
+        }
+
+        // === ШАГ 2: Локальная дисперсия через integral images ===
+        const integral = new Float64Array((width + 1) * (height + 1));
+        const integralSq = new Float64Array((width + 1) * (height + 1));
+        const stride = width + 1;
+
+        for (let y = 0; y < height; y++) {
+            let rowSum = 0;
+            let rowSumSq = 0;
+            for (let x = 0; x < width; x++) {
+                const val = gray[y * width + x];
+                rowSum += val;
+                rowSumSq += val * val;
+
+                const idx = (y + 1) * stride + (x + 1);
+                integral[idx] = rowSum + integral[y * stride + (x + 1)];
+                integralSq[idx] = rowSumSq + integralSq[y * stride + (x + 1)];
+            }
+        }
+
+        const varianceMap = new Float32Array(width * height);
+        let maxVar = 0;
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const y1 = Math.max(0, y - half);
+                const y2 = Math.min(height - 1, y + half);
+                const x1 = Math.max(0, x - half);
+                const x2 = Math.min(width - 1, x + half);
+                const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+
+                const sum = integral[(y2 + 1) * stride + (x2 + 1)]
+                          - integral[y1 * stride + (x2 + 1)]
+                          - integral[(y2 + 1) * stride + x1]
+                          + integral[y1 * stride + x1];
+
+                const sumSq = integralSq[(y2 + 1) * stride + (x2 + 1)]
+                            - integralSq[y1 * stride + (x2 + 1)]
+                            - integralSq[(y2 + 1) * stride + x1]
+                            + integralSq[y1 * stride + x1];
+
+                const mean = sum / area;
+                const meanSq = sumSq / area;
+                const variance = Math.max(0, meanSq - mean * mean);
+
+                const idx = y * width + x;
+                varianceMap[idx] = variance;
+                if (variance > maxVar) maxVar = variance;
+            }
+        }
+
+        // === ШАГ 3: JET Colormap ===
+        for (let i = 0; i < varianceMap.length; i++) {
+            let val = maxVar > 0 ? varianceMap[i] / maxVar : 0;
+            let invVal = 1.0 - val;
+
+            const [r, g, b] = jetColormap(invVal);
+
+            const idx = i * 4;
+            data[idx]     = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+        }
+
+        return { imageData, status: `Детектор текстур (w:${windowSize})` };
     }
 };
+
+function jetColormap(t) {
+    let r, g, b;
+    if (t < 0.125) {
+        r = 0; g = 0; b = 0.5 + t * 4;
+    } else if (t < 0.375) {
+        r = 0; g = (t - 0.125) * 4; b = 1;
+    } else if (t < 0.625) {
+        r = (t - 0.375) * 4; g = 1; b = 1 - (t - 0.375) * 4;
+    } else if (t < 0.875) {
+        r = 1; g = 1 - (t - 0.625) * 4; b = 0;
+    } else {
+        r = 1 - (t - 0.875) * 4; g = 0; b = 0;
+    }
+    return [
+        Math.round(Math.max(0, Math.min(1, r)) * 255),
+        Math.round(Math.max(0, Math.min(1, g)) * 255),
+        Math.round(Math.max(0, Math.min(1, b)) * 255)
+    ];
+}
 
 self.onmessage = function(e) {
     const { imageData, effectType, params, taskId } = e.data;

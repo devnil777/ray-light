@@ -149,5 +149,16 @@ export const effects = {
             // Logic moved to worker
             return { imageData, status: "Круг Иттена" };
         }
+    },
+
+    texture_loss: {
+        name: "Детектор текстур",
+        params: [
+            { name: "windowSize", type: "number", default: 15, min: 3, max: 51, step: 2 }
+        ],
+        apply: (imageData, params) => {
+            // Logic moved to worker
+            return { imageData, status: "Детектор текстур" };
+        }
     }
 };
