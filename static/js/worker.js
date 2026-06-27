@@ -8,7 +8,7 @@
 // But since I have ESM, let's use a trick or just redefine the effects here.
 
 const effects = {
-    original: (imageData, params) => ({ imageData, status: "Original" }),
+    original: (imageData, params) => ({ imageData, status: "Оригинал" }),
 
     channels: (imageData, params) => {
         const data = imageData.data;
@@ -20,7 +20,7 @@ const effects = {
             data[i + 1] = channelIdx === 1 ? val : 0;
             data[i + 2] = channelIdx === 2 ? val : 0;
         }
-        return { imageData, status: `Channel: ${channel}` };
+        return { imageData, status: `Канал: ${channel}` };
     },
 
     grayscale_channel: (imageData, params) => {
@@ -33,7 +33,7 @@ const effects = {
             data[i + 1] = val;
             data[i + 2] = val;
         }
-        return { imageData, status: `Grayscale ${channel}` };
+        return { imageData, status: `ЧБ Канал: ${channel}` };
     },
 
     invert: (imageData, params) => {
@@ -43,7 +43,7 @@ const effects = {
             data[i + 1] = 255 - data[i + 1];
             data[i + 2] = 255 - data[i + 2];
         }
-        return { imageData, status: "Inverted" };
+        return { imageData, status: "Инверсия" };
     },
 
     exposure: (imageData, params) => {
@@ -55,7 +55,7 @@ const effects = {
             data[i + 1] = Math.min(255, data[i + 1] * factor);
             data[i + 2] = Math.min(255, data[i + 2] * factor);
         }
-        return { imageData, status: `Exposure: ${stops > 0 ? '+' : ''}${stops} EV` };
+        return { imageData, status: `Экспозиция: ${stops > 0 ? '+' : ''}${stops} EV` };
     },
 
     clipping: (imageData, params) => {
@@ -74,7 +74,7 @@ const effects = {
                 data[i] = 0; data[i + 1] = 0; data[i + 2] = 255;
             }
         }
-        return { imageData, status: "Clipping (R:High, B:Low)" };
+        return { imageData, status: "Пересветы/тени (К:верх, С:низ)" };
     },
 
     focus_peaking: (imageData, params) => {
@@ -104,7 +104,7 @@ const effects = {
             }
         }
         data.set(output);
-        return { imageData, status: "Focus Peaking" };
+        return { imageData, status: "Зоны фокуса" };
     },
 
     histogram: (imageData, params) => {
@@ -167,7 +167,7 @@ const effects = {
         drawGraph(histG, 1, 0.2, 0.25);
         drawGraph(histB, 2, 0.2, 0.0);
 
-        return { imageData, status: "Histogram (L, R, G, B)" };
+        return { imageData, status: "Гистограмма (L, R, G, B)" };
     },
 
     itten_circle: (imageData, params) => {
@@ -264,7 +264,7 @@ const effects = {
         // or just put them in the status string.
         // Given I'm a "skilled engineer", I should probably try to make it look decent.
 
-        const statusStr = "Itten Circle: " + percents.join("% ") + "%";
+        const statusStr = "Круг Иттена: " + percents.join("% ") + "%";
         return { imageData, status: statusStr };
     }
 };
@@ -284,7 +284,7 @@ self.onmessage = function(e) {
     const endTime = performance.now();
     const processingTime = (endTime - startTime).toFixed(1);
 
-    result.status += ` (${processingTime}ms)`;
+    result.status += ` (${processingTime}мс)`;
 
     self.postMessage({
         imageData: result.imageData,

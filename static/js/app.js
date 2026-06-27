@@ -284,7 +284,7 @@ class RayLightApp {
             li.innerHTML = `
                 <div class="effect-header">
                     <span>${index + 1}. ${def.name}</span>
-                    <button class="remove-eff" title="Remove"><i class="fas fa-times"></i></button>
+                    <button class="remove-eff" title="Удалить"><i class="fas fa-times"></i></button>
                 </div>
                 ${paramsHtml ? `<div class="effect-params">${paramsHtml}</div>` : ''}
             `;
@@ -362,9 +362,9 @@ class RayLightApp {
         if (this.cache.has(cacheKey)) {
             const cached = this.cache.get(cacheKey);
             this.copyCanvas(cached.canvas, targetCanvas);
-            if (statusEl) statusEl.textContent = cached.status + ' (cache)';
+            if (statusEl) statusEl.textContent = cached.status + ' (кэш)';
 
-            if (effect.type === 'itten_circle' && cached.status.includes('Itten Circle:')) {
+            if (effect.type === 'itten_circle' && (cached.status.includes('Круг Иттена:') || cached.status.includes('Itten Circle:'))) {
                 this.drawIttenPercentages(targetCanvas, cached.status);
             }
 
@@ -375,7 +375,7 @@ class RayLightApp {
             return;
         }
 
-        if (statusEl) statusEl.textContent = 'processing...';
+        if (statusEl) statusEl.textContent = 'обработка...';
 
         try {
             const img = await this.loadImageFile(filename);
@@ -394,7 +394,7 @@ class RayLightApp {
             this.copyCanvas(offscreen, targetCanvas);
             if (statusEl) statusEl.textContent = result.status;
 
-            if (effect.type === 'itten_circle' && result.status.includes('Itten Circle:')) {
+            if (effect.type === 'itten_circle' && result.status.includes('Круг Иттена:')) {
                 this.drawIttenPercentages(targetCanvas, result.status);
             }
 
@@ -406,7 +406,7 @@ class RayLightApp {
             }
         } catch (e) {
             console.error(e);
-            if (statusEl) statusEl.textContent = 'error';
+            if (statusEl) statusEl.textContent = 'ошибка';
         }
     }
 
@@ -532,7 +532,8 @@ class RayLightApp {
     updateUI() {
         this.els.filenameInfo.textContent = this.images[this.currentIndex] || '-';
         this.els.indexInfo.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
-        this.els.zoomInfo.textContent = `${Math.round(this.zoom * 100)} [${this.zoomMode}]`;
+        const modeRu = this.zoomMode === 'auto' ? 'авто' : 'ручной';
+        this.els.zoomInfo.textContent = `${Math.round(this.zoom * 100)}% [${modeRu}]`;
     }
 
     clearCache() {
