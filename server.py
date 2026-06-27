@@ -1,5 +1,8 @@
 import os
 import argparse
+import webbrowser
+import threading
+import time
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -50,6 +53,14 @@ def main():
             return FileResponse("static/index.html")
 
     print(f"Serving images from: {IMG_DIR}")
+
+    # Auto-open browser
+    def open_browser():
+        time.sleep(1.5)
+        webbrowser.open(f"http://localhost:{args.port}")
+
+    threading.Thread(target=open_browser, daemon=True).start()
+
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 if __name__ == "__main__":
