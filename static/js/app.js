@@ -11,6 +11,7 @@ class RayLightApp {
         this.flipH = 1;
         this.flipV = 1;
         this.gridType = '1';
+        this.fitGridToAspect = true;
         this.activeEffects = [];
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.workers = [];
@@ -52,6 +53,13 @@ class RayLightApp {
             this.renderGrid();
             this.limitEffects();
             this.updateCurrentImages();
+            this.saveSettings();
+        });
+
+        this.els.fitAspectToggle.addEventListener('change', (e) => {
+            this.fitGridToAspect = e.target.checked;
+            this.updateGridSize();
+            this.applyTransform();
             this.saveSettings();
         });
 
@@ -174,7 +182,8 @@ class RayLightApp {
             indexInfo: document.getElementById('index-info'),
             prevBtn: document.getElementById('prev-btn'),
             nextBtn: document.getElementById('next-btn'),
-            effectLimitMsg: document.getElementById('effect-limit-msg')
+            effectLimitMsg: document.getElementById('effect-limit-msg'),
+            fitAspectToggle: document.getElementById('fit-aspect-toggle')
         };
 
         // Add a message about auto/manual mode
@@ -459,15 +468,21 @@ class RayLightApp {
     }
 
     updateGridSize() {
-        if (!this.currentImageAspect) return;
-
-        const [cols, rows] = this.getGridDimensions();
-        const gridAspect = (this.currentImageAspect * cols) / rows;
-
         const workspace = this.els.workspace;
         const statusBar = document.getElementById('status-bar');
         const availableWidth = workspace.clientWidth - 20; // 10px padding * 2
         const availableHeight = workspace.clientHeight - statusBar.clientHeight - 20;
+
+        if (!this.currentImageAspect || !this.fitGridToAspect) {
+            this.els.gridContainer.style.width = '100%';
+            this.els.gridContainer.style.height = '100%';
+            this.els.gridContainer.style.flex = '1';
+            this.els.gridContainer.style.margin = '0';
+            return;
+        }
+
+        const [cols, rows] = this.getGridDimensions();
+        const gridAspect = (this.currentImageAspect * cols) / rows;
 
         const workspaceAspect = availableWidth / availableHeight;
 
@@ -508,31 +523,27 @@ class RayLightApp {
         const radius = Math.min(canvas.width, canvas.height) * 0.3;
 
         ctx.font = `bold ${Math.max(14, canvas.width / 35)}px Arial`;
-        ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Shadow for better readability
-        ctx.shadowColor = 'black';
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 4;
+        const ittenColors = [
+            [255, 255, 0], [255, 200, 0], [255, 150, 0], [255, 80, 0],
+            [255, 0, 0], [200, 0, 100], [130, 0, 200], [80, 0, 255],
+            [0, 0, 255], [0, 150, 200], [0, 255, 0], [150, 255, 0]
+        ];
 
         for (let i = 0; i < 12; i++) {
             const angle = (i * 30 + 15) * Math.PI / 180 - Math.PI / 2;
             const x = centerX + Math.cos(angle) * radius;
             const y = centerY + Math.sin(angle) * radius;
-            ctx.strokeText(`${percents[i]}%`, x, y);
+
+            // Invert color logic
+            const bg = ittenColors[i];
+            const invR = 255 - bg[0], invG = 255 - bg[1], invB = 255 - bg[2];
+            ctx.fillStyle = `rgb(${invR}, ${invG}, ${invB})`;
+
             ctx.fillText(`${percents[i]}%`, x, y);
         }
-
-        // Reset shadow
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
     }
 
     copyCanvas(src, dest) {
@@ -577,10 +588,15 @@ class RayLightApp {
     }
 
     updateUI() {
-        this.els.filenameInfo.textContent = this.images[this.currentIndex] || '-';
-        this.els.indexInfo.textContent = `${this.currentIndex + 1} / ${this.images.length}`;
+        const filename = this.images[this.currentIndex] || '-';
+        const indexStr = `${this.currentIndex + 1} / ${this.images.length}`;
+
+        this.els.filenameInfo.textContent = filename;
+        this.els.indexInfo.textContent = indexStr;
         const modeRu = this.zoomMode === 'auto' ? 'авто' : 'ручной';
         this.els.zoomInfo.textContent = `${Math.round(this.zoom * 100)}% [${modeRu}]`;
+
+        document.title = filename !== '-' ? `${filename} (${indexStr}) | Ray-Light` : 'Ray-Light';
     }
 
     clearCache() {
@@ -613,6 +629,7 @@ class RayLightApp {
     saveSettings() {
         const settings = {
             gridType: this.gridType,
+            fitGridToAspect: this.fitGridToAspect,
             activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
@@ -625,6 +642,9 @@ class RayLightApp {
                 const settings = JSON.parse(saved);
                 this.gridType = settings.gridType || '1';
                 this.els.gridSelect.value = this.gridType;
+
+                this.fitGridToAspect = settings.fitGridToAspect ?? true;
+                this.els.fitAspectToggle.checked = this.fitGridToAspect;
 
                 this.activeEffects = (settings.activeEffects || []).map(e => ({
                     id: Math.random(),

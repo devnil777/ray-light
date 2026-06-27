@@ -213,6 +213,32 @@ select {
     cursor: move;
 }
 
+.remove-eff {
+    background: none !important;
+    border: none !important;
+    color: #666;
+    padding: 2px 5px !important;
+    font-size: 14px !important;
+    transition: color 0.2s;
+}
+
+.remove-eff:hover {
+    color: #ff4d4d;
+}
+
+.checkbox-label {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input {
+    margin: 0;
+    cursor: pointer;
+}
+
 .effect-params {
     display: grid;
     grid-template-columns: 1fr auto;
