@@ -8,7 +8,38 @@
 // But since I have ESM, let's use a trick or just redefine the effects here.
 
 const effects = {
-    original: (imageData, params) => ({ imageData, status: "Оригинал" }),
+    original: (imageData, params) => {
+        const overlayType = params.overlayType || 'none';
+        if (overlayType === 'none') {
+            return { imageData, status: "Оригинал" };
+        }
+
+        const w = imageData.width;
+        const h = imageData.height;
+
+        const offscreen = new OffscreenCanvas(w, h);
+        const ctx = offscreen.getContext('2d');
+        ctx.putImageData(imageData, 0, 0);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = Math.max(1.5, Math.min(w, h) / 250);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.font = `bold ${Math.max(10, Math.min(w, h) / 40)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const gridSize = parseInt(params.overlayGridSize || 3);
+        const spiralSide = params.overlaySpiralSide || 'left';
+
+        switch (overlayType) {
+            case 'grid': drawGridLines(ctx, w, h, gridSize); break;
+            case 'golden-ratio': drawGoldenRatio(ctx, w, h); break;
+            case 'diagonal': drawDiagonal(ctx, w, h); break;
+            case 'golden-spiral': drawGoldenSpiral(ctx, w, h, spiralSide); break;
+        }
+
+        return { imageData: ctx.getImageData(0, 0, w, h), status: "Оригинал" };
+    },
 
     channels: (imageData, params) => {
         const data = imageData.data;
@@ -388,6 +419,122 @@ function jetColormap(t) {
         Math.round(Math.max(0, Math.min(1, g)) * 255),
         Math.round(Math.max(0, Math.min(1, b)) * 255)
     ];
+}
+
+function drawGridLines(ctx, w, h, n) {
+    ctx.beginPath();
+    for (let i = 1; i < n; i++) {
+        ctx.moveTo(w * i / n, 0); ctx.lineTo(w * i / n, h);
+        ctx.moveTo(0, h * i / n); ctx.lineTo(w, h * i / n);
+    }
+    ctx.stroke();
+}
+
+function drawGoldenRatio(ctx, w, h) {
+    const phi = 1.618;
+    const a = 1 / (phi * phi);
+    const b = 1 / phi;
+
+    ctx.beginPath();
+    ctx.moveTo(w * a, 0); ctx.lineTo(w * a, h);
+    ctx.moveTo(w * b, 0); ctx.lineTo(w * b, h);
+    ctx.moveTo(0, h * a); ctx.lineTo(w, h * a);
+    ctx.moveTo(0, h * b); ctx.lineTo(w, h * b);
+    ctx.stroke();
+}
+
+function drawDiagonal(ctx, w, h) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(w, h);
+    ctx.moveTo(w, 0); ctx.lineTo(0, h);
+    ctx.stroke();
+}
+
+function drawGoldenSpiral(ctx, w, h, side) {
+    const fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946];
+
+    const LEFT = -4, RIGHT = 9, TOP = -6, BOTTOM = 15;
+    const HEIGHT_FIB = BOTTOM - TOP;
+
+    const scale = h / HEIGHT_FIB;
+    let offsetX, offsetY;
+    let flipX = false, flipY = false;
+
+    switch (side) {
+        case 'left':
+            offsetX = RIGHT * scale - w / 2;
+            offsetY = -TOP * scale - h / 2;
+            flipY = true;
+            break;
+        case 'right':
+            offsetX = w - RIGHT * scale - w / 2;
+            offsetY = -TOP * scale - h / 2;
+            break;
+        case 'top':
+            offsetX = RIGHT * scale - w / 2;
+            offsetY = BOTTOM * scale - h / 2;
+            flipX = true;
+            flipY = true;
+            break;
+        case 'bottom':
+            offsetX = w - RIGHT * scale - w / 2;
+            offsetY = BOTTOM * scale - h / 2;
+            flipX = true;
+            break;
+    }
+
+    ctx.save();
+
+    const startX = w / 2 + offsetX;
+    const startY = h / 2 + offsetY;
+    ctx.translate(startX, startY);
+    ctx.rotate(270 * Math.PI / 180);
+    ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+
+    let cx = 0, cy = 0;
+
+    for (let i = 0; i < fib.length; i++) {
+        const r = fib[i] * scale;
+
+        if (i >= 2) {
+            const dir = (i - 2) % 4;
+            const shift = fib[i - 2] * scale;
+            if (dir === 0) cy -= shift;
+            else if (dir === 1) cx += shift;
+            else if (dir === 2) cy += shift;
+            else if (dir === 3) cx -= shift;
+        }
+
+        const quad = i % 4;
+        let sqX = cx, sqY = cy;
+        if (quad === 0) { sqX = cx; sqY = cy - r; }
+        else if (quad === 1) { sqX = cx; sqY = cy; }
+        else if (quad === 2) { sqX = cx - r; sqY = cy; }
+        else if (quad === 3) { sqX = cx - r; sqY = cy - r; }
+
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.strokeRect(sqX, sqY, r, r);
+        ctx.restore();
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+        ctx.shadowBlur = Math.max(4, Math.min(12, Math.min(w, h) / 80));
+        ctx.lineCap = 'round';
+
+        const startAngle = (i - 1) * Math.PI / 2;
+        const endAngle = i * Math.PI / 2;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, startAngle, endAngle);
+        ctx.stroke();
+        ctx.restore();
+
+        if (r > Math.max(w, h) * 2) break;
+    }
+
+    ctx.restore();
 }
 
 self.onmessage = async function(e) {

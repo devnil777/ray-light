@@ -7,7 +7,27 @@
 export const effects = {
     original: {
         name: "Оригинал",
-        params: [],
+        params: [
+            { name: "overlayType", label: "Наложение сетки", type: "select", options: [
+                { value: "none", label: "Нет" },
+                { value: "grid", label: "Сетка" },
+                { value: "golden-ratio", label: "Золотое сечение" },
+                { value: "diagonal", label: "Диагонали" },
+                { value: "golden-spiral", label: "Золотая спираль" }
+            ], default: "none" },
+            { name: "overlayGridSize", label: "Размер сетки", type: "select", options: [
+                { value: 3, label: "3×3" },
+                { value: 4, label: "4×4" },
+                { value: 5, label: "5×5" },
+                { value: 6, label: "6×6" }
+            ], default: 3 },
+            { name: "overlaySpiralSide", label: "Сторона спирали", type: "select", options: [
+                { value: "left", label: "Слева" },
+                { value: "right", label: "Справа" },
+                { value: "top", label: "Сверху" },
+                { value: "bottom", label: "Снизу" }
+            ], default: "left" }
+        ],
         apply: (imageData, params) => {
             return { imageData, status: "Оригинал" };
         }

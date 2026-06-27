@@ -13,9 +13,6 @@ class RayLightApp {
         this.gridType = '1';
         this.fitGridToAspect = true;
         this.activeEffects = [];
-        this.overlayGridType = 'none';
-        this.overlayGridSize = 3;
-        this.overlaySpiralSide = 'left';
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.blobCache = new Map(); // filename -> Blob (avoid re-fetch for worker)
         this.workers = [];
@@ -91,29 +88,6 @@ class RayLightApp {
             this.updateGridSize();
             this.applyTransform();
             this.saveSettings();
-        });
-
-        // Overlay grid
-        this.els.overlayGridSelect.addEventListener('change', (e) => {
-            this.overlayGridType = e.target.value;
-            this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
-            this.els.overlaySpiralSideGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
-            this.redrawOverlays();
-            this.saveSettings();
-        });
-
-        this.els.overlayGridSize.addEventListener('change', (e) => {
-            this.overlayGridSize = parseInt(e.target.value);
-            this.redrawOverlays();
-            this.saveSettings();
-        });
-
-        this.els.overlaySpiralSide.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                this.overlaySpiralSide = e.target.value;
-                this.redrawOverlays();
-                this.saveSettings();
-            }
         });
 
         // Background picker
@@ -240,12 +214,7 @@ class RayLightApp {
             prevBtn: document.getElementById('prev-btn'),
             nextBtn: document.getElementById('next-btn'),
             effectLimitMsg: document.getElementById('effect-limit-msg'),
-            fitAspectToggle: document.getElementById('fit-aspect-toggle'),
-            overlayGridSelect: document.getElementById('overlay-grid-select'),
-            overlayGridSize: document.getElementById('overlay-grid-size'),
-            overlayGridSizeGroup: document.getElementById('overlay-grid-size-group'),
-            overlaySpiralSide: document.getElementById('overlay-spiral-side'),
-            overlaySpiralSideGroup: document.getElementById('overlay-spiral-side-group')
+            fitAspectToggle: document.getElementById('fit-aspect-toggle')
         };
     }
 
@@ -280,7 +249,6 @@ class RayLightApp {
             cell.innerHTML = `
                 <div class="canvas-container" id="container-${i}">
                     <canvas id="canvas-${i}"></canvas>
-                    <canvas id="overlay-${i}" class="grid-overlay"></canvas>
                 </div>
                 <div class="cell-status" id="status-${i}">
                     <span class="effect-name">-</span>
@@ -477,7 +445,6 @@ class RayLightApp {
             this.copyCanvas(cached.canvas, targetCanvas);
             if (statusEl) statusEl.textContent = cached.status + ' (кэш)';
 
-            this.drawOverlay(effectIdx);
             this.applyTransform();
             this.updateUI();
             return;
@@ -510,7 +477,6 @@ class RayLightApp {
             this.copyCanvas(cached, targetCanvas);
             if (statusEl) statusEl.textContent = result.status;
 
-            this.drawOverlay(effectIdx);
             this.applyTransform();
             this.updateUI();
         } catch (e) {
@@ -632,182 +598,7 @@ class RayLightApp {
         this.els.gridContainer.style.margin = 'auto';
     }
 
-    // === Overlay Grid Drawing ===
 
-    redrawOverlays() {
-        const count = this.getGridCount();
-        for (let i = 0; i < count; i++) {
-            this.drawOverlay(i);
-        }
-    }
-
-    drawOverlay(cellIndex) {
-        const overlay = document.getElementById(`overlay-${cellIndex}`);
-        const canvas = document.getElementById(`canvas-${cellIndex}`);
-        if (!overlay || !canvas) return;
-
-        const ctx = overlay.getContext('2d');
-
-        if (this.overlayGridType === 'none' || !canvas.width || !canvas.height) {
-            overlay.width = 0;
-            overlay.height = 0;
-            return;
-        }
-
-        const effect = this.activeEffects[cellIndex];
-        if (effect && effects[effect.type]?.analysis) {
-            overlay.width = 0;
-            overlay.height = 0;
-            return;
-        }
-
-        overlay.width = canvas.width;
-        overlay.height = canvas.height;
-
-        ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-        const w = overlay.width;
-        const h = overlay.height;
-
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.lineWidth = Math.max(1, Math.min(w, h) / 400);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.font = `bold ${Math.max(10, Math.min(w, h) / 40)}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        switch (this.overlayGridType) {
-            case 'grid': this.drawGridLines(ctx, w, h, this.overlayGridSize); break;
-            case 'golden-ratio': this.drawGoldenRatio(ctx, w, h); break;
-            case 'diagonal': this.drawDiagonal(ctx, w, h); break;
-            case 'golden-spiral': this.drawGoldenSpiral(ctx, w, h, this.overlaySpiralSide); break;
-        }
-    }
-
-    drawGridLines(ctx, w, h, n) {
-        ctx.beginPath();
-        for (let i = 1; i < n; i++) {
-            ctx.moveTo(w * i / n, 0); ctx.lineTo(w * i / n, h);
-            ctx.moveTo(0, h * i / n); ctx.lineTo(w, h * i / n);
-        }
-        ctx.stroke();
-    }
-
-    drawGoldenRatio(ctx, w, h) {
-        const phi = 1.618;
-        const a = 1 / (phi * phi);
-        const b = 1 / phi;
-
-        ctx.beginPath();
-        // Vertical
-        ctx.moveTo(w * a, 0); ctx.lineTo(w * a, h);
-        ctx.moveTo(w * b, 0); ctx.lineTo(w * b, h);
-        // Horizontal
-        ctx.moveTo(0, h * a); ctx.lineTo(w, h * a);
-        ctx.moveTo(0, h * b); ctx.lineTo(w, h * b);
-        ctx.stroke();
-    }
-
-    drawDiagonal(ctx, w, h) {
-        ctx.beginPath();
-        ctx.moveTo(0, 0); ctx.lineTo(w, h);
-        ctx.moveTo(w, 0); ctx.lineTo(0, h);
-        ctx.stroke();
-    }
-
-    drawGoldenSpiral(ctx, w, h, side) {
-        const fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946];
-
-        const LEFT = -4, RIGHT = 9, TOP = -6, BOTTOM = 15;
-        const HEIGHT_FIB = BOTTOM - TOP;
-
-        const scale = h / HEIGHT_FIB;
-        let offsetX, offsetY;
-        let flipX = false, flipY = false;
-
-        switch (side) {
-            case 'left':
-                offsetX = RIGHT * scale - w / 2;
-                offsetY = -TOP * scale - h / 2;
-                flipY = true;
-                break;
-            case 'right':
-                offsetX = w - RIGHT * scale - w / 2;
-                offsetY = -TOP * scale - h / 2;
-                break;
-            case 'top':
-                offsetX = RIGHT * scale - w / 2;
-                offsetY = BOTTOM * scale - h / 2;
-                flipX = true;
-                flipY = true;
-                break;
-            case 'bottom':
-                offsetX = w - RIGHT * scale - w / 2;
-                offsetY = BOTTOM * scale - h / 2;
-                flipX = true;
-                break;
-        }
-
-        ctx.save();
-
-        const startX = w / 2 + offsetX;
-        const startY = h / 2 + offsetY;
-        ctx.translate(startX, startY);
-        ctx.rotate(270 * Math.PI / 180);
-        ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-
-        let cx = 0, cy = 0;
-
-        for (let i = 0; i < fib.length; i++) {
-            const r = fib[i] * scale;
-
-            if (i >= 2) {
-                const dir = (i - 2) % 4;
-                const shift = fib[i - 2] * scale;
-                if (dir === 0) cy -= shift;
-                else if (dir === 1) cx += shift;
-                else if (dir === 2) cy += shift;
-                else if (dir === 3) cx -= shift;
-            }
-
-            // Draw squares
-            const quad = i % 4;
-            let sqX = cx, sqY = cy;
-            if (quad === 0) { sqX = cx; sqY = cy - r; }
-            else if (quad === 1) { sqX = cx; sqY = cy; }
-            else if (quad === 2) { sqX = cx - r; sqY = cy; }
-            else if (quad === 3) { sqX = cx - r; sqY = cy - r; }
-
-            ctx.save();
-            ctx.globalAlpha = 0.2;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(sqX, sqY, r, r);
-            ctx.restore();
-
-            // Draw arc segment
-            ctx.save();
-            ctx.strokeStyle = '#FFD700';
-            ctx.lineWidth = Math.max(2, Math.min(4, Math.min(w, h) / 200));
-            ctx.shadowColor = '#FFD700';
-            ctx.shadowBlur = Math.max(4, Math.min(12, Math.min(w, h) / 80));
-            ctx.lineCap = 'round';
-
-            const startAngle = (i - 1) * Math.PI / 2;
-            const endAngle = i * Math.PI / 2;
-
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, startAngle, endAngle);
-            ctx.stroke();
-            ctx.restore();
-
-            if (r > Math.max(w, h) * 2) break;
-        }
-
-        ctx.restore();
-    }
-
-    // === End Overlay Grid Drawing ===
 
     copyCanvas(src, dest) {
         dest.width = src.width;
@@ -830,7 +621,6 @@ class RayLightApp {
 
         for (let i = 0; i < count; i++) {
             const canvas = document.getElementById(`canvas-${i}`);
-            const overlay = document.getElementById(`overlay-${i}`);
             if (canvas) {
                 const effect = this.activeEffects[i];
                 const isAnalysis = effect && effects[effect.type]?.analysis;
@@ -842,18 +632,15 @@ class RayLightApp {
 
                     if (isAnalysis) {
                         canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
-                        if (overlay) overlay.style.transform = canvas.style.transform;
                     } else {
                         this.zoom = scale;
                         this.pan = { x: 0, y: 0 };
                         const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
                         canvas.style.transform = t;
-                        if (overlay) overlay.style.transform = t;
                     }
                 } else {
                     const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
                     canvas.style.transform = t;
-                    if (overlay) overlay.style.transform = t;
                 }
             }
         }
@@ -907,9 +694,6 @@ class RayLightApp {
         const settings = {
             gridType: this.gridType,
             fitGridToAspect: this.fitGridToAspect,
-            overlayGridType: this.overlayGridType,
-            overlayGridSize: this.overlayGridSize,
-            overlaySpiralSide: this.overlaySpiralSide,
             activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
@@ -934,18 +718,6 @@ class RayLightApp {
 
             this.fitGridToAspect = settings.fitGridToAspect ?? true;
             this.els.fitAspectToggle.checked = this.fitGridToAspect;
-
-            this.overlayGridType = settings.overlayGridType || 'none';
-            this.els.overlayGridSelect.value = this.overlayGridType;
-            this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
-            this.els.overlaySpiralSideGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
-
-            this.overlayGridSize = settings.overlayGridSize || 3;
-            this.els.overlayGridSize.value = this.overlayGridSize;
-
-            this.overlaySpiralSide = settings.overlaySpiralSide || 'left';
-            const sideRadio = this.els.overlaySpiralSide.querySelector(`[value="${this.overlaySpiralSide}"]`);
-            if (sideRadio) sideRadio.checked = true;
 
             this.activeEffects = (settings.activeEffects || []).map(e => ({
                 id: Math.random(),

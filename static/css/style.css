@@ -114,15 +114,6 @@ canvas {
     transform-origin: center;
 }
 
-.grid-overlay {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform-origin: center;
-    pointer-events: none;
-    z-index: 2;
-}
-
 .cell-status {
     position: absolute;
     bottom: 0;
