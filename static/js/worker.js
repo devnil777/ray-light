@@ -538,18 +538,33 @@ function drawGoldenSpiral(ctx, w, h, side) {
 }
 
 self.onmessage = async function(e) {
-    const { imageBlob, effectType, params, taskId } = e.data;
+    const { imageBlob, effectType, params, taskId, rotation } = e.data;
+    const rot = rotation || 0;
 
     const startTime = performance.now();
 
     let result;
     try {
         const imageBitmap = await createImageBitmap(imageBlob);
-        const offscreen = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
+        let w = imageBitmap.width;
+        let h = imageBitmap.height;
+
+        const canvasW = (rot % 180 !== 0) ? h : w;
+        const canvasH = (rot % 180 !== 0) ? w : h;
+
+        const offscreen = new OffscreenCanvas(canvasW, canvasH);
         const ctx = offscreen.getContext('2d');
-        ctx.drawImage(imageBitmap, 0, 0);
-        const imageData = ctx.getImageData(0, 0, imageBitmap.width, imageBitmap.height);
-        imageBitmap.close(); // Clean up graphics memory immediately
+
+        if (rot % 180 !== 0) {
+            ctx.translate(canvasW / 2, canvasH / 2);
+            ctx.rotate(rot * Math.PI / 180);
+            ctx.drawImage(imageBitmap, -w / 2, -h / 2);
+        } else {
+            ctx.drawImage(imageBitmap, 0, 0);
+        }
+        imageBitmap.close();
+
+        const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
 
         if (effects[effectType]) {
             result = effects[effectType](imageData, params);

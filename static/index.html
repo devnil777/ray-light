@@ -21,9 +21,8 @@
                 <div id="file-info">Файл: <span id="current-filename">-</span></div>
                 <div id="zoom-info">Масштаб: -</div>
                 <div id="navigation-controls">
-                    <button id="prev-btn" title="Назад (Стрелка влево)"><i class="fas fa-chevron-left"></i></button>
                     <span id="index-info">0 / 0</span>
-                    <button id="next-btn" title="Вперед (Стрелка вправо)"><i class="fas fa-chevron-right"></i></button>
+                    <span id="fav-count" class="hidden"></span>
                 </div>
             </div>
         </main>
@@ -31,7 +30,7 @@
         <div id="resizer"></div>
 
         <aside id="sidebar">
-            <section class="panel">
+            <section class="panel sidebar-top">
                 <h3><i class="fas fa-cog"></i> Основные настройки</h3>
                 <div class="control-group">
                     <label>Фон рабочей области</label>
@@ -56,22 +55,33 @@
                 </div>
 
             </section>
-            <section class="panel">
-                <h3><i class="fas fa-magic"></i> Список эффектов</h3>
-                <ul id="active-effects" class="sortable-list">
-                    <!-- Active effects will be here -->
-                </ul>
-                <div class="info-text" id="effect-limit-msg" style="display: none;">
-                    Максимум 9 эффектов
-                </div>
-            </section>
+            <div class="sidebar-scroll">
+                <section class="panel">
+                    <h3><i class="fas fa-magic"></i> Список эффектов</h3>
+                    <ul id="active-effects" class="sortable-list">
+                        <!-- Active effects will be here -->
+                    </ul>
+                    <div class="info-text" id="effect-limit-msg" style="display: none;">
+                        Максимум 9 эффектов
+                    </div>
+                </section>
 
-            <section class="panel">
-                <h3><i class="fas fa-plus-circle"></i> Доступные эффекты</h3>
-                <div id="available-effects" class="effect-palette">
-                    <!-- Palette of effects to add -->
-                </div>
-            </section>
+                <section class="panel">
+                    <h3><i class="fas fa-plus-circle"></i> Доступные эффекты</h3>
+                    <div id="available-effects" class="effect-palette">
+                        <!-- Palette of effects to add -->
+                    </div>
+                </section>
+                <section class="panel">
+                    <h3><i class="fas fa-star"></i> Избранное</h3>
+                    <button id="copy-fav-btn" style="width:100%;padding:8px;font-size:12px;">📋 Копировать отмеченные</button>
+                </section>
+            </div>
+            <div class="sidebar-nav">
+                <button id="sidebar-prev-btn" title="Назад (Стрелка влево)"><i class="fas fa-chevron-left"></i> Назад</button>
+                <button id="fav-btn" title="Отметить/снять отметку (`)"><i class="far fa-heart"></i></button>
+                <button id="sidebar-next-btn" title="Вперед (Стрелка вправо)">Вперед <i class="fas fa-chevron-right"></i></button>
+            </div>
         </aside>
     </div>
 

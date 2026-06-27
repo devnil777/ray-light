@@ -21,7 +21,9 @@ class RayLightApp {
         this.navigationGeneration = 0;
         this.lastNavigationDir = 1;
         this._prevLayout = null;
-
+        this.originalAspect = null;
+        this.favorites = new Set();
+ 
         this.init();
     }
 
@@ -83,24 +85,38 @@ class RayLightApp {
         });
 
         // Navigation
-        this.els.prevBtn.addEventListener('click', () => this.navigate(-1));
-        this.els.nextBtn.addEventListener('click', () => this.navigate(1));
+        this.els.sidebarPrevBtn.addEventListener('click', () => this.navigate(-1));
+        this.els.sidebarNextBtn.addEventListener('click', () => this.navigate(1));
+        this.els.favBtn.addEventListener('click', () => this.toggleFavorite());
+        document.getElementById('copy-fav-btn').addEventListener('click', () => this.copyFavorites());
         window.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowLeft') this.navigate(-1);
             if (e.key === 'ArrowRight') this.navigate(1);
+            if (e.code === 'Backquote') this.toggleFavorite();
         });
 
         // View controls
         document.getElementById('rotate-90').addEventListener('click', () => {
             this.rotation = (this.rotation + 90) % 360;
-            this.applyTransform();
+            this.updateRotateUI();
+            const isFlipped = this.rotation % 180 !== 0;
+            this.currentImageAspect = isFlipped && this.originalAspect ? 1 / this.originalAspect : this.originalAspect;
+            this.zoomMode = 'auto';
+            this.zoom = 1;
+            this.pan = { x: 0, y: 0 };
+            this.cancelPending();
+            this.clearCache();
+            this.recomputeLayout();
+            this.updateCurrentImages();
         });
         document.getElementById('flip-h').addEventListener('click', () => {
             this.flipH *= -1;
+            this.updateFlipUI();
             this.applyTransform();
         });
         document.getElementById('flip-v').addEventListener('click', () => {
             this.flipV *= -1;
+            this.updateFlipUI();
             this.applyTransform();
         });
         document.getElementById('reset-view').addEventListener('click', () => {
@@ -109,8 +125,13 @@ class RayLightApp {
             this.rotation = 0;
             this.flipH = 1;
             this.flipV = 1;
-            this.applyTransform();
-            this.updateUI();
+            this.currentImageAspect = this.originalAspect;
+            this.cancelPending();
+            this.clearCache();
+            this.recomputeLayout();
+            this.updateCurrentImages();
+            this.updateFlipUI();
+            this.updateRotateUI();
         });
 
         // Splitter
@@ -195,10 +216,20 @@ class RayLightApp {
             filenameInfo: document.getElementById('current-filename'),
             zoomInfo: document.getElementById('zoom-info'),
             indexInfo: document.getElementById('index-info'),
-            prevBtn: document.getElementById('prev-btn'),
-            nextBtn: document.getElementById('next-btn'),
+            favBtn: document.getElementById('fav-btn'),
+            favCount: document.getElementById('fav-count'),
+            sidebarPrevBtn: document.getElementById('sidebar-prev-btn'),
+            sidebarNextBtn: document.getElementById('sidebar-next-btn'),
             effectLimitMsg: document.getElementById('effect-limit-msg')
         };
+        this.createHeartOverlay();
+    }
+
+    createHeartOverlay() {
+        this.els.heartOverlay = document.createElement('div');
+        this.els.heartOverlay.id = 'heart-overlay';
+        this.els.heartOverlay.innerHTML = '<i class="fas fa-heart"></i>';
+        this.els.workspace.appendChild(this.els.heartOverlay);
     }
 
     initPalette() {
@@ -229,9 +260,9 @@ class RayLightApp {
         const ar = this.currentImageAspect;
         if (!ar) {
             let best = null;
-            for (let cols = 1; cols <= 3; cols++) {
-                for (let rows = 1; rows <= 3; rows++) {
-                    if (cols * rows < n) continue;
+            for (let cols = 1; cols <= 9; cols++) {
+                for (let rows = 1; rows <= 9; rows++) {
+                    if (cols * rows < n || cols * rows > 9) continue;
                     const waste = cols * rows - n;
                     const balanced = Math.abs(cols - rows);
                     const preferCols = cols >= rows;
@@ -253,9 +284,9 @@ class RayLightApp {
         let best = null;
         let bestCoverage = -1;
 
-        for (let cols = 1; cols <= 3; cols++) {
-            for (let rows = 1; rows <= 3; rows++) {
-                if (cols * rows < n) continue;
+        for (let cols = 1; cols <= 9; cols++) {
+            for (let rows = 1; rows <= 9; rows++) {
+                if (cols * rows < n || cols * rows > 9) continue;
 
                 const gridAr = (ar * cols) / rows;
                 let gridW, gridH;
@@ -454,7 +485,8 @@ class RayLightApp {
                 if (generation !== this.navigationGeneration) return;
                 this.blobCache.set(filename, blob);
                 const imgBitmap = await createImageBitmap(blob);
-                this.currentImageAspect = imgBitmap.width / imgBitmap.height;
+                this.originalAspect = imgBitmap.width / imgBitmap.height;
+                this.currentImageAspect = (this.rotation % 180 !== 0) ? 1 / this.originalAspect : this.originalAspect;
                 imgBitmap.close();
                 this.recomputeLayout();
             } catch (e) {
@@ -566,7 +598,7 @@ class RayLightApp {
         if (generation === undefined) generation = this.navigationGeneration;
         return new Promise((resolve) => {
             const taskId = Math.random();
-            const task = { blob, effectType, params, taskId, resolve, generation };
+            const task = { blob, effectType, params, taskId, resolve, generation, rotation: this.rotation };
 
             if (this.workerBusy) {
                 // Replace pending: only the latest task matters
@@ -587,7 +619,8 @@ class RayLightApp {
             imageBlob: task.blob,
             effectType: task.effectType,
             params: task.params,
-            taskId: task.taskId
+            taskId: task.taskId,
+            rotation: task.rotation
         });
     }
 
@@ -687,11 +720,11 @@ class RayLightApp {
                     } else {
                         this.zoom = scale;
                         this.pan = { x: 0, y: 0 };
-                        const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                        const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
                         canvas.style.transform = t;
                     }
                 } else {
-                    const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                    const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
                     canvas.style.transform = t;
                 }
             }
@@ -706,13 +739,56 @@ class RayLightApp {
         this.els.indexInfo.textContent = indexStr;
         const modeRu = this.zoomMode === 'auto' ? 'авто' : 'ручной';
         this.els.zoomInfo.textContent = `Масштаб: ${Math.round(this.zoom * 100)}% (${modeRu})`;
+        this.updateFavUI();
 
         document.title = filename !== '-' ? `${filename} (${indexStr}) | Ray-Light` : 'Ray-Light';
+    }
+
+    updateRotateUI() {
+        document.getElementById('rotate-90').classList.toggle('active', this.rotation !== 0);
+    }
+
+    updateFlipUI() {
+        document.getElementById('flip-h').classList.toggle('active', this.flipH === -1);
+        document.getElementById('flip-v').classList.toggle('active', this.flipV === -1);
     }
 
     clearCache() {
         this.cache.clear();
         this.blobCache.clear();
+    }
+
+    toggleFavorite() {
+        const filename = this.images[this.currentIndex];
+        if (!filename) return;
+        if (this.favorites.has(filename)) {
+            this.favorites.delete(filename);
+        } else {
+            this.favorites.add(filename);
+        }
+        this.updateFavUI();
+        this.saveSettings();
+    }
+
+    updateFavUI() {
+        const filename = this.images[this.currentIndex];
+        const isFav = filename && this.favorites.has(filename);
+        this.els.favBtn.classList.toggle('active', isFav);
+        this.els.favBtn.innerHTML = isFav ? '<i class="fas fa-heart"></i>' : '<i class="far fa-heart"></i>';
+        this.els.heartOverlay.classList.toggle('visible', isFav);
+        const count = this.favorites.size;
+        if (count > 0) {
+            this.els.favCount.textContent = `❤ ${count}`;
+            this.els.favCount.classList.remove('hidden');
+        } else {
+            this.els.favCount.classList.add('hidden');
+        }
+    }
+
+    copyFavorites() {
+        const names = Array.from(this.favorites);
+        if (names.length === 0) return;
+        navigator.clipboard.writeText(names.join('\n')).catch(() => {});
     }
 
     preloadAround(dir) {
@@ -744,7 +820,8 @@ class RayLightApp {
 
     saveSettings() {
         const settings = {
-            activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
+            activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params })),
+            favorites: Array.from(this.favorites)
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
         this.saveSettingsToApi(settings);
@@ -768,6 +845,7 @@ class RayLightApp {
                 type: e.type,
                 params: e.params
             }));
+            this.favorites = new Set(settings.favorites || []);
             this.renderActiveEffects();
         } catch (e) {
             console.error("Failed to load settings", e);

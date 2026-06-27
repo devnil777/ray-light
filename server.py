@@ -53,8 +53,10 @@ async def save_settings(request: Request):
     try:
         body = await request.json()
         settings_path = os.path.join(IMG_DIR, SETTINGS_FILE)
-        with open(settings_path, 'w', encoding='utf-8') as f:
+        tmp_path = settings_path + ".tmp"
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(body, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, settings_path)
         return {"ok": True}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
