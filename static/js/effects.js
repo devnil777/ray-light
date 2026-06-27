@@ -9,7 +9,7 @@ export const effects = {
         name: "Оригинал",
         params: [],
         apply: (imageData, params) => {
-            return { imageData, status: "Original" };
+            return { imageData, status: "Оригинал" };
         }
     },
 
@@ -29,7 +29,7 @@ export const effects = {
                 data[i + 1] = channelIdx === 1 ? val : 0;
                 data[i + 2] = channelIdx === 2 ? val : 0;
             }
-            return { imageData, status: `Channel: ${channel}` };
+            return { imageData, status: `Канал: ${channel}` };
         }
     },
 
@@ -49,7 +49,7 @@ export const effects = {
                 data[i + 1] = val;
                 data[i + 2] = val;
             }
-            return { imageData, status: `Grayscale ${channel}` };
+            return { imageData, status: `ЧБ Канал: ${channel}` };
         }
     },
 
@@ -63,7 +63,7 @@ export const effects = {
                 data[i + 1] = 255 - data[i + 1];
                 data[i + 2] = 255 - data[i + 2];
             }
-            return { imageData, status: "Inverted" };
+            return { imageData, status: "Инверсия" };
         }
     },
 
@@ -82,7 +82,7 @@ export const effects = {
                 data[i + 1] = Math.min(255, data[i + 1] * factor);
                 data[i + 2] = Math.min(255, data[i + 2] * factor);
             }
-            return { imageData, status: `Exposure: ${stops > 0 ? '+' : ''}${stops} EV` };
+            return { imageData, status: `Экспозиция: ${stops > 0 ? '+' : ''}${stops} EV` };
         }
     },
 
@@ -118,7 +118,7 @@ export const effects = {
                 }
                 // else keep original
             }
-            return { imageData, status: "Clipping (R:High, B:Low)" };
+            return { imageData, status: "Пересветы/тени (К:верх, С:низ)" };
         }
     },
 
@@ -129,7 +129,7 @@ export const effects = {
         ],
         apply: (imageData, params) => {
             // Logic moved to worker
-            return { imageData, status: "Focus Peaking" };
+            return { imageData, status: "Зоны фокуса" };
         }
     },
 
@@ -138,7 +138,7 @@ export const effects = {
         params: [],
         apply: (imageData, params) => {
             // Logic moved to worker
-            return { imageData, status: "Histogram" };
+            return { imageData, status: "Гистограмма" };
         }
     },
 
@@ -147,7 +147,7 @@ export const effects = {
         params: [],
         apply: (imageData, params) => {
             // Logic moved to worker
-            return { imageData, status: "Itten Circle" };
+            return { imageData, status: "Круг Иттена" };
         }
     }
 };

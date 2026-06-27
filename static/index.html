@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ray-Light | Photo Audit</title>
+    <title>Ray-Light | Аудит фото</title>
     <link rel="stylesheet" href="css/style.css">
     <!-- FontAwesome for icons (optional, but requested for style) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -18,12 +18,12 @@
             </div>
 
             <div id="status-bar">
-                <div id="file-info">File: <span id="current-filename">-</span></div>
-                <div id="zoom-info">Zoom: <span id="current-zoom">100</span>%</div>
+                <div id="file-info">Файл: <span id="current-filename">-</span></div>
+                <div id="zoom-info">Масштаб: <span id="current-zoom">100</span>%</div>
                 <div id="navigation-controls">
-                    <button id="prev-btn" title="Previous (Left Arrow)"><i class="fas fa-chevron-left"></i></button>
+                    <button id="prev-btn" title="Назад (Стрелка влево)"><i class="fas fa-chevron-left"></i></button>
                     <span id="index-info">0 / 0</span>
-                    <button id="next-btn" title="Next (Right Arrow)"><i class="fas fa-chevron-right"></i></button>
+                    <button id="next-btn" title="Вперед (Стрелка вправо)"><i class="fas fa-chevron-right"></i></button>
                 </div>
             </div>
         </main>
@@ -36,32 +36,32 @@
                 <div class="control-group">
                     <label>Фон рабочей области</label>
                     <div class="bg-picker">
-                        <div class="bg-swatch bg-0" data-bg="0" title="White"></div>
+                        <div class="bg-swatch bg-0" data-bg="0" title="Белый"></div>
                         <div class="bg-swatch bg-1" data-bg="1"></div>
                         <div class="bg-swatch bg-2" data-bg="2"></div>
                         <div class="bg-swatch bg-3" data-bg="3"></div>
                         <div class="bg-swatch bg-4" data-bg="4"></div>
-                        <div class="bg-swatch bg-5" data-bg="5" title="Black"></div>
+                        <div class="bg-swatch bg-5" data-bg="5" title="Черный"></div>
                     </div>
                 </div>
 
                 <div class="control-group">
                     <label>Ориентация</label>
                     <div class="btn-group">
-                        <button id="rotate-90" title="Rotate 90°"><i class="fas fa-redo"></i></button>
-                        <button id="flip-h" title="Flip Horizontal"><i class="fas fa-arrows-alt-h"></i></button>
-                        <button id="flip-v" title="Flip Vertical"><i class="fas fa-arrows-alt-v"></i></button>
-                        <button id="reset-view" title="Reset View"><i class="fas fa-sync-alt"></i></button>
+                        <button id="rotate-90" title="Поворот 90°"><i class="fas fa-redo"></i></button>
+                        <button id="flip-h" title="Отразить горизонтально"><i class="fas fa-arrows-alt-h"></i></button>
+                        <button id="flip-v" title="Отразить вертикально"><i class="fas fa-arrows-alt-v"></i></button>
+                        <button id="reset-view" title="Сбросить вид"><i class="fas fa-sync-alt"></i></button>
                     </div>
                 </div>
 
                 <div class="control-group">
                     <label>Сетка</label>
                     <select id="grid-select">
-                        <option value="1">1 (Single)</option>
-                        <option value="2x2">2x2 (4 Cells)</option>
-                        <option value="3x2">3x2 (6 Cells)</option>
-                        <option value="3x3">3x3 (9 Cells)</option>
+                        <option value="1">1 (Одно окно)</option>
+                        <option value="2x2">2x2 (4 ячейки)</option>
+                        <option value="3x2">3x2 (6 ячеек)</option>
+                        <option value="3x3">3x3 (9 ячеек)</option>
                     </select>
                 </div>
             </section>
