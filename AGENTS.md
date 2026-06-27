@@ -72,8 +72,6 @@ Overlay is implemented via a second `<canvas class="grid-overlay">` per cell, po
 
 ### Golden Spiral (drawGoldenSpiral)
 
-Implemented as a logarithmic spiral r(θ) = a·e^(b·θ) where b = ln(φ)/(π/2). The spiral starts from the selected corner and winds inward toward the φ-power point (the "eye") opposite the starting corner. The φ-power points (0.382 and 0.618 of w/h) are used as eye positions — matching `drawGoldenRatio` grid lines.
+Implemented as a Fibonacci-numbers-based spiral (sequence 1,1,2,3,5,8,13…). The spiral is auto-positioned to snap to the selected side of the image via a transform chain (translate → rotate 270° → flip). Bounding box in Fibonacci units: 13×21 (LEFT=-4, RIGHT=9, TOP=-6, BOTTOM=15).
 
-The spiral is drawn from ~2.5 turns before entering the frame (outside the canvas) inward to r ≈ 2px near the eye. Only visible segments are rendered.
-
-Corner selection (`overlaySpiralCorner`): `bottom-right`, `top-right`, `top-left`, `bottom-left`. Default: `bottom-right`. Controls shown when `golden-spiral` is selected in the overlay type dropdown.
+Side selection (`overlaySpiralSide`): `left`, `right`, `top`, `bottom`. Default: `left`. Controls shown when `golden-spiral` is selected in the overlay type dropdown.

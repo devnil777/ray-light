@@ -222,6 +222,34 @@ select {
     padding: 4px;
 }
 
+.radio-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.radio-label {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background 0.1s;
+    font-size: 11px;
+    color: #aaa;
+    user-select: none;
+}
+
+.radio-label:hover {
+    background: var(--hover-bg);
+}
+
+.radio-label input[type="radio"] {
+    margin: 0;
+    accent-color: var(--text-color);
+}
+
 /* Effects List */
 .sortable-list {
     list-style: none;

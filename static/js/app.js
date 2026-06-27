@@ -15,7 +15,7 @@ class RayLightApp {
         this.activeEffects = [];
         this.overlayGridType = 'none';
         this.overlayGridSize = 3;
-        this.overlaySpiralCorner = 'bottom-right';
+        this.overlaySpiralSide = 'left';
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.blobCache = new Map(); // filename -> Blob (avoid re-fetch for worker)
         this.workers = [];
@@ -97,7 +97,7 @@ class RayLightApp {
         this.els.overlayGridSelect.addEventListener('change', (e) => {
             this.overlayGridType = e.target.value;
             this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
-            this.els.overlaySpiralCornerGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
+            this.els.overlaySpiralSideGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
             this.redrawOverlays();
             this.saveSettings();
         });
@@ -108,10 +108,12 @@ class RayLightApp {
             this.saveSettings();
         });
 
-        this.els.overlaySpiralCorner.addEventListener('change', (e) => {
-            this.overlaySpiralCorner = e.target.value;
-            this.redrawOverlays();
-            this.saveSettings();
+        this.els.overlaySpiralSide.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                this.overlaySpiralSide = e.target.value;
+                this.redrawOverlays();
+                this.saveSettings();
+            }
         });
 
         // Background picker
@@ -242,8 +244,8 @@ class RayLightApp {
             overlayGridSelect: document.getElementById('overlay-grid-select'),
             overlayGridSize: document.getElementById('overlay-grid-size'),
             overlayGridSizeGroup: document.getElementById('overlay-grid-size-group'),
-            overlaySpiralCorner: document.getElementById('overlay-spiral-corner'),
-            overlaySpiralCornerGroup: document.getElementById('overlay-spiral-corner-group')
+            overlaySpiralSide: document.getElementById('overlay-spiral-side'),
+            overlaySpiralSideGroup: document.getElementById('overlay-spiral-side-group')
         };
     }
 
@@ -678,7 +680,7 @@ class RayLightApp {
             case 'grid': this.drawGridLines(ctx, w, h, this.overlayGridSize); break;
             case 'golden-ratio': this.drawGoldenRatio(ctx, w, h); break;
             case 'diagonal': this.drawDiagonal(ctx, w, h); break;
-            case 'golden-spiral': this.drawGoldenSpiral(ctx, w, h, this.overlaySpiralCorner); break;
+            case 'golden-spiral': this.drawGoldenSpiral(ctx, w, h, this.overlaySpiralSide); break;
         }
     }
 
@@ -713,100 +715,95 @@ class RayLightApp {
         ctx.stroke();
     }
 
-    drawGoldenSpiral(ctx, w, h, corner) {
-        const n = 11;
+    drawGoldenSpiral(ctx, w, h, side) {
+        const fib = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946];
 
-        const fibs = [1, 1];
-        for (let i = 2; i < n; i++) fibs.push(fibs[i - 1] + fibs[i - 2]);
+        const LEFT = -4, RIGHT = 9, TOP = -6, BOTTOM = 15;
+        const HEIGHT_FIB = BOTTOM - TOP;
 
-        const scale = Math.min(w, h) * 0.8 / fibs[n - 1];
+        const scale = h / HEIGHT_FIB;
+        let offsetX, offsetY;
+        let flipX = false, flipY = false;
 
-        let eyeX, eyeY;
-        switch (corner) {
-            case 'top-left':
-                eyeX = w * 0.618; eyeY = h * 0.618;
+        switch (side) {
+            case 'left':
+                offsetX = RIGHT * scale - w / 2;
+                offsetY = -TOP * scale - h / 2;
+                flipY = true;
                 break;
-            case 'top-right':
-                eyeX = w * 0.382; eyeY = h * 0.618;
+            case 'right':
+                offsetX = w - RIGHT * scale - w / 2;
+                offsetY = -TOP * scale - h / 2;
                 break;
-            case 'bottom-left':
-                eyeX = w * 0.618; eyeY = h * 0.382;
+            case 'top':
+                offsetX = RIGHT * scale - w / 2;
+                offsetY = BOTTOM * scale - h / 2;
+                flipX = true;
+                flipY = true;
                 break;
-            case 'bottom-right':
-            default:
-                eyeX = w * 0.382; eyeY = h * 0.382;
+            case 'bottom':
+                offsetX = w - RIGHT * scale - w / 2;
+                offsetY = BOTTOM * scale - h / 2;
+                flipX = true;
                 break;
-        }
-
-        const squares = [];
-        let size = fibs[0] * scale;
-        let x = eyeX - size / 2;
-        let y = eyeY - size / 2;
-        squares.push({ x, y, size });
-
-        let minX = x, minY = y, maxX = x + size, maxY = y + size;
-
-        for (let i = 1; i < n; i++) {
-            size = fibs[i] * scale;
-            const pDir = (i - 1) % 4;
-            let nx, ny;
-
-            if (pDir === 0) {
-                nx = maxX; ny = maxY - size; maxX = nx + size;
-            } else if (pDir === 1) {
-                nx = maxX - size; ny = minY - size; minY = ny;
-            } else if (pDir === 2) {
-                nx = minX - size; ny = minY; minX = nx;
-            } else {
-                nx = minX; ny = maxY; maxY = ny + size;
-            }
-
-            squares.push({ x: nx, y: ny, size });
         }
 
         ctx.save();
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
-        for (const s of squares) {
-            const right = s.x + s.size;
-            const bottom = s.y + s.size;
-            if (right < 0 || s.x > w || bottom < 0 || s.y > h) continue;
-            ctx.strokeRect(
-                Math.max(s.x, 0), Math.max(s.y, 0),
-                Math.min(s.size, w - Math.max(s.x, 0)),
-                Math.min(s.size, h - Math.max(s.y, 0))
-            );
-        }
+        const startX = w / 2 + offsetX;
+        const startY = h / 2 + offsetY;
+        ctx.translate(startX, startY);
+        ctx.rotate(270 * Math.PI / 180);
+        ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
 
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = Math.max(2, Math.min(4, Math.min(w, h) / 200));
-        ctx.shadowColor = '#FFD700';
-        ctx.shadowBlur = Math.max(4, Math.min(12, Math.min(w, h) / 80));
-        ctx.beginPath();
+        let cx = 0, cy = 0;
 
-        for (let i = 0; i < squares.length; i++) {
-            const s = squares[i];
-            const dir = i % 4;
-            let cx, cy, start, end;
+        for (let i = 0; i < fib.length; i++) {
+            const r = fib[i] * scale;
 
-            if (dir === 0) {
-                cx = s.x; cy = s.y + s.size; start = 1.5 * Math.PI; end = 2.0 * Math.PI;
-            } else if (dir === 1) {
-                cx = s.x + s.size; cy = s.y + s.size; start = Math.PI; end = 1.5 * Math.PI;
-            } else if (dir === 2) {
-                cx = s.x + s.size; cy = s.y; start = 0.5 * Math.PI; end = Math.PI;
-            } else {
-                cx = s.x; cy = s.y; start = 0; end = 0.5 * Math.PI;
+            if (i >= 2) {
+                const dir = (i - 2) % 4;
+                const shift = fib[i - 2] * scale;
+                if (dir === 0) cy -= shift;
+                else if (dir === 1) cx += shift;
+                else if (dir === 2) cy += shift;
+                else if (dir === 3) cx -= shift;
             }
 
-            if (i === 0) {
-                ctx.moveTo(cx + s.size * Math.cos(start), cy + s.size * Math.sin(start));
-            }
-            ctx.arc(cx, cy, s.size, start, end, false);
+            // Draw squares
+            const quad = i % 4;
+            let sqX = cx, sqY = cy;
+            if (quad === 0) { sqX = cx; sqY = cy - r; }
+            else if (quad === 1) { sqX = cx; sqY = cy; }
+            else if (quad === 2) { sqX = cx - r; sqY = cy; }
+            else if (quad === 3) { sqX = cx - r; sqY = cy - r; }
+
+            ctx.save();
+            ctx.globalAlpha = 0.2;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sqX, sqY, r, r);
+            ctx.restore();
+
+            // Draw arc segment
+            ctx.save();
+            ctx.strokeStyle = '#FFD700';
+            ctx.lineWidth = Math.max(2, Math.min(4, Math.min(w, h) / 200));
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = Math.max(4, Math.min(12, Math.min(w, h) / 80));
+            ctx.lineCap = 'round';
+
+            const startAngle = (i - 1) * Math.PI / 2;
+            const endAngle = i * Math.PI / 2;
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, startAngle, endAngle);
+            ctx.stroke();
+            ctx.restore();
+
+            if (r > Math.max(w, h) * 2) break;
         }
 
-        ctx.stroke();
         ctx.restore();
     }
 
@@ -912,7 +909,7 @@ class RayLightApp {
             fitGridToAspect: this.fitGridToAspect,
             overlayGridType: this.overlayGridType,
             overlayGridSize: this.overlayGridSize,
-            overlaySpiralCorner: this.overlaySpiralCorner,
+            overlaySpiralSide: this.overlaySpiralSide,
             activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
@@ -941,13 +938,14 @@ class RayLightApp {
             this.overlayGridType = settings.overlayGridType || 'none';
             this.els.overlayGridSelect.value = this.overlayGridType;
             this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
-            this.els.overlaySpiralCornerGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
+            this.els.overlaySpiralSideGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
 
             this.overlayGridSize = settings.overlayGridSize || 3;
             this.els.overlayGridSize.value = this.overlayGridSize;
 
-            this.overlaySpiralCorner = settings.overlaySpiralCorner || 'bottom-right';
-            this.els.overlaySpiralCorner.value = this.overlaySpiralCorner;
+            this.overlaySpiralSide = settings.overlaySpiralSide || 'left';
+            const sideRadio = this.els.overlaySpiralSide.querySelector(`[value="${this.overlaySpiralSide}"]`);
+            if (sideRadio) sideRadio.checked = true;
 
             this.activeEffects = (settings.activeEffects || []).map(e => ({
                 id: Math.random(),

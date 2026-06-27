@@ -93,14 +93,26 @@
                     </select>
                 </div>
 
-                <div class="control-group" id="overlay-spiral-corner-group" style="display:none;">
-                    <label>Угол спирали</label>
-                    <select id="overlay-spiral-corner">
-                        <option value="bottom-right">Правый нижний</option>
-                        <option value="top-right">Правый верхний</option>
-                        <option value="top-left">Левый верхний</option>
-                        <option value="bottom-left">Левый нижний</option>
-                    </select>
+                <div class="control-group" id="overlay-spiral-side-group" style="display:none;">
+                    <label>Привязка к стороне</label>
+                    <div class="radio-grid" id="overlay-spiral-side">
+                        <label class="radio-label">
+                            <input type="radio" name="spiral-side" value="left" checked>
+                            <span>Левая</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="spiral-side" value="right">
+                            <span>Правая</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="spiral-side" value="top">
+                            <span>Верхняя</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="spiral-side" value="bottom">
+                            <span>Нижняя</span>
+                        </label>
+                    </div>
                 </div>
             </section>
 
