@@ -135,23 +135,24 @@ const effects = {
             data[i] = 30; data[i+1] = 30; data[i+2] = 30; data[i+3] = 255;
         }
 
-        const marginH = 40; // Left/Right margin
-        const marginV = 40; // Top/Bottom margin
-        const chartPadding = 10; // Padding inside the background box
+        const marginH = 60; // Increased Left/Right margin
+        const marginV = 60; // Increased Top/Bottom margin
+        const chartPadding = 15; // Padding inside the background box
+        const boxGap = 20; // Increased gap between boxes
         const availableWidth = width - 2 * marginH;
         const availableHeight = height - 2 * marginV;
-        const chartHeight = availableHeight / 4;
+        const chartHeight = (availableHeight + boxGap) / 4;
 
         const drawGraph = (hist, colorIdx, chartIdx) => {
             // Calculate box position
             const boxY = marginV + chartIdx * chartHeight;
-            const boxH = chartHeight - 10; // Gap between boxes
+            const boxH = chartHeight - boxGap;
 
             // Draw background box
             for (let y = Math.floor(boxY); y < Math.floor(boxY + boxH); y++) {
                 for (let x = marginH; x < width - marginH; x++) {
                     const idx = (y * width + x) * 4;
-                    data[idx] = 45; data[idx+1] = 45; data[idx+2] = 45; // Slightly lighter than background
+                    data[idx] = 40; data[idx+1] = 40; data[idx+2] = 40; // Distinct grey box
                 }
             }
 

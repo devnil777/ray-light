@@ -521,7 +521,9 @@ class RayLightApp {
 
     drawIttenPercentages(canvas, status) {
         const ctx = canvas.getContext('2d');
-        const percents = status.split(': ')[1].split('% ').map(s => s.replace('%', ''));
+        // Extract only the percentages part, ignoring the processing time in parentheses
+        const statusPart = status.split(': ')[1].split(' (')[0].trim();
+        const percents = statusPart.split('% ').map(s => s.replace('%', ''));
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
         const radius = Math.min(canvas.width, canvas.height) * 0.3;
