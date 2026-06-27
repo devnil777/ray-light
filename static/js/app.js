@@ -29,12 +29,34 @@ class RayLightApp {
         this.init();
     }
 
+    async saveSettingsToApi(settings) {
+        try {
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+        } catch (e) {
+            // API unavailable — localStorage fallback handles it
+        }
+    }
+
+    async loadSettingsFromApi() {
+        try {
+            const resp = await fetch('/api/settings');
+            if (resp.ok) {
+                return await resp.json();
+            }
+        } catch (e) {}
+        return null;
+    }
+
     async init() {
         this.initWorkers();
         this.initElements();
         this.initEventListeners();
         this.initPalette();
-        this.loadSettings();
+        await this.loadSettings();
 
         await this.fetchImages();
         this.renderGrid();
@@ -954,39 +976,47 @@ class RayLightApp {
             activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
+        this.saveSettingsToApi(settings);
     }
 
-    loadSettings() {
-        const saved = localStorage.getItem('ray_light_settings');
-        if (saved) {
-            try {
-                const settings = JSON.parse(saved);
-                this.gridType = settings.gridType || '1';
-                this.els.gridSelect.value = this.gridType;
+    async loadSettings() {
+        let settings = await this.loadSettingsFromApi();
 
-                this.fitGridToAspect = settings.fitGridToAspect ?? true;
-                this.els.fitAspectToggle.checked = this.fitGridToAspect;
-
-                this.overlayGridType = settings.overlayGridType || 'none';
-                this.els.overlayGridSelect.value = this.overlayGridType;
-                this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
-                this.els.overlaySpiralCornerGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
-
-                this.overlayGridSize = settings.overlayGridSize || 3;
-                this.els.overlayGridSize.value = this.overlayGridSize;
-
-                this.overlaySpiralCorner = settings.overlaySpiralCorner || 'bottom-right';
-                this.els.overlaySpiralCorner.value = this.overlaySpiralCorner;
-
-                this.activeEffects = (settings.activeEffects || []).map(e => ({
-                    id: Math.random(),
-                    type: e.type,
-                    params: e.params
-                }));
-                this.renderActiveEffects();
-            } catch (e) {
-                console.error("Failed to load settings", e);
+        if (!settings) {
+            const saved = localStorage.getItem('ray_light_settings');
+            if (saved) {
+                try { settings = JSON.parse(saved); } catch (e) {}
             }
+        }
+
+        if (!settings) return;
+
+        try {
+            this.gridType = settings.gridType || '1';
+            this.els.gridSelect.value = this.gridType;
+
+            this.fitGridToAspect = settings.fitGridToAspect ?? true;
+            this.els.fitAspectToggle.checked = this.fitGridToAspect;
+
+            this.overlayGridType = settings.overlayGridType || 'none';
+            this.els.overlayGridSelect.value = this.overlayGridType;
+            this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
+            this.els.overlaySpiralCornerGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
+
+            this.overlayGridSize = settings.overlayGridSize || 3;
+            this.els.overlayGridSize.value = this.overlayGridSize;
+
+            this.overlaySpiralCorner = settings.overlaySpiralCorner || 'bottom-right';
+            this.els.overlaySpiralCorner.value = this.overlaySpiralCorner;
+
+            this.activeEffects = (settings.activeEffects || []).map(e => ({
+                id: Math.random(),
+                type: e.type,
+                params: e.params
+            }));
+            this.renderActiveEffects();
+        } catch (e) {
+            console.error("Failed to load settings", e);
         }
     }
 }

@@ -135,12 +135,13 @@ const effects = {
             data[i] = 30; data[i+1] = 30; data[i+2] = 30; data[i+3] = 255;
         }
 
-        const marginH = 60; // Increased Left/Right margin
-        const marginV = 60; // Increased Top/Bottom margin
-        const chartPadding = 15; // Padding inside the background box
-        const boxGap = 20; // Increased gap between boxes
+        const marginH = 60;
+        const marginV = 60;
+        const extraBottomMargin = 50;
+        const chartPadding = 15;
+        const boxGap = 38;
         const availableWidth = width - 2 * marginH;
-        const availableHeight = height - 2 * marginV;
+        const availableHeight = height - marginV - (marginV + extraBottomMargin);
         const chartHeight = (availableHeight + boxGap) / 4;
 
         const drawGraph = (hist, colorIdx, chartIdx) => {

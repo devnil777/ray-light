@@ -2,18 +2,28 @@
 
 ## What this is
 
-Professional photo analysis web app (for checking retouch artifacts before publication).
-SPA frontend (vanilla JS/HTML/CSS) + minimal Python FastAPI backend. UI is in Russian.
+Professional photo analysis desktop app (for checking retouch artifacts before publication).
+SPA frontend (vanilla JS/HTML/CSS) + Python FastAPI backend wrapped in pywebview. UI is in Russian.
 
-## Run
+## Run (development)
 
 ```bash
-pip install fastapi uvicorn Pillow
+pip install -r requirements.txt
 python server.py ./path/to/photos
-# Opens http://localhost:8000 automatically
+# Opens a pywebview desktop window
 ```
 
-No build step. No npm. No bundler. Static files are served directly from `static/`.
+Without a path argument, a folder picker dialog appears.
+
+## Build EXE
+
+```bash
+pip install PyInstaller
+python build_exe.py
+# Produces dist/RayLight.exe (onefile, windowed)
+```
+
+Run the EXE: `dist\RayLight.exe [путь_к_фотографиям]`.
 
 ## Verify
 
@@ -28,11 +38,12 @@ Takes a screenshot to `final_result.png`. Requires the server running on port 80
 
 ## Architecture
 
-- `server.py` — FastAPI backend. Serves static files + `/api/images` and `/api/image/{filename}` endpoints. Only serves `.jpg`/`.jpeg`.
-- `static/js/app.js` — Main SPA class `RayLightApp`. Grid, zoom/pan, navigation, effect management, caching, settings (localStorage).
+- `server.py` — FastAPI backend. Serves static files + `/api/images`, `/api/image/{filename}`, and `/api/settings` endpoints. Only serves `.jpg`/`.jpeg`. Launches pywebview window instead of browser.
+- `static/js/app.js` — Main SPA class `RayLightApp`. Grid, zoom/pan, navigation, effect management, caching, settings (API + localStorage fallback).
 - `static/js/effects.js` — Effect definitions as ES module. Each effect: `{ name, params[], apply(imageData, params) }`.
 - `static/js/worker.js` — Web Worker that duplicates all effect logic (workers can't use ESM imports).
 - `static/css/style.css` — All styles, dark theme, grid layouts.
+- `build_exe.py` — PyInstaller one-file build script.
 
 ## Critical: Adding/modifying effects
 
@@ -49,7 +60,7 @@ Number of active effects is limited to grid cell count (1, 4, 6, or 9). Each cel
 
 ## Settings persistence
 
-User preferences (grid type, active effects list, fit-to-aspect toggle, overlay grid type/size, overlay spiral corner) are saved to `localStorage` under key `ray_light_settings`.
+User preferences (grid type, active effects list, fit-to-aspect toggle, overlay grid type/size, overlay spiral corner) are saved to `<image_dir>/ray-light-settings.json` via `/api/settings` endpoints. Falls back to `localStorage` (`ray_light_settings`) when the API is unavailable.
 
 ## Overlay composition grids
 
