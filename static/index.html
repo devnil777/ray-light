@@ -71,6 +71,39 @@
                         <span>Ячейки по размеру фото</span>
                     </label>
                 </div>
+
+                <div class="control-group">
+                    <label>Наложение сетки</label>
+                    <select id="overlay-grid-select">
+                        <option value="none">Нет</option>
+                        <option value="rule-of-thirds">Правило третей</option>
+                        <option value="grid">Сетка</option>
+                        <option value="golden-ratio">Золотое сечение</option>
+                        <option value="diagonal">Диагонали</option>
+                        <option value="triangle">Треугольники</option>
+                        <option value="golden-spiral">Золотая спираль</option>
+                    </select>
+                </div>
+
+                <div class="control-group" id="overlay-grid-size-group" style="display:none;">
+                    <label>Размер ячеек сетки</label>
+                    <select id="overlay-grid-size">
+                        <option value="3">3×3</option>
+                        <option value="4">4×4</option>
+                        <option value="5">5×5</option>
+                        <option value="6">6×6</option>
+                    </select>
+                </div>
+
+                <div class="control-group" id="overlay-spiral-corner-group" style="display:none;">
+                    <label>Угол спирали</label>
+                    <select id="overlay-spiral-corner">
+                        <option value="bottom-right">Правый нижний</option>
+                        <option value="top-right">Правый верхний</option>
+                        <option value="top-left">Левый верхний</option>
+                        <option value="bottom-left">Левый нижний</option>
+                    </select>
+                </div>
             </section>
 
             <section class="panel">

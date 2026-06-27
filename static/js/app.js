@@ -13,6 +13,9 @@ class RayLightApp {
         this.gridType = '1';
         this.fitGridToAspect = true;
         this.activeEffects = [];
+        this.overlayGridType = 'none';
+        this.overlayGridSize = 3;
+        this.overlaySpiralCorner = 'bottom-right';
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.blobCache = new Map(); // filename -> Blob (avoid re-fetch for worker)
         this.workers = [];
@@ -65,6 +68,27 @@ class RayLightApp {
             this.fitGridToAspect = e.target.checked;
             this.updateGridSize();
             this.applyTransform();
+            this.saveSettings();
+        });
+
+        // Overlay grid
+        this.els.overlayGridSelect.addEventListener('change', (e) => {
+            this.overlayGridType = e.target.value;
+            this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
+            this.els.overlaySpiralCornerGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
+            this.redrawOverlays();
+            this.saveSettings();
+        });
+
+        this.els.overlayGridSize.addEventListener('change', (e) => {
+            this.overlayGridSize = parseInt(e.target.value);
+            this.redrawOverlays();
+            this.saveSettings();
+        });
+
+        this.els.overlaySpiralCorner.addEventListener('change', (e) => {
+            this.overlaySpiralCorner = e.target.value;
+            this.redrawOverlays();
             this.saveSettings();
         });
 
@@ -192,7 +216,12 @@ class RayLightApp {
             prevBtn: document.getElementById('prev-btn'),
             nextBtn: document.getElementById('next-btn'),
             effectLimitMsg: document.getElementById('effect-limit-msg'),
-            fitAspectToggle: document.getElementById('fit-aspect-toggle')
+            fitAspectToggle: document.getElementById('fit-aspect-toggle'),
+            overlayGridSelect: document.getElementById('overlay-grid-select'),
+            overlayGridSize: document.getElementById('overlay-grid-size'),
+            overlayGridSizeGroup: document.getElementById('overlay-grid-size-group'),
+            overlaySpiralCorner: document.getElementById('overlay-spiral-corner'),
+            overlaySpiralCornerGroup: document.getElementById('overlay-spiral-corner-group')
         };
     }
 
@@ -227,6 +256,7 @@ class RayLightApp {
             cell.innerHTML = `
                 <div class="canvas-container" id="container-${i}">
                     <canvas id="canvas-${i}"></canvas>
+                    <canvas id="overlay-${i}" class="grid-overlay"></canvas>
                 </div>
                 <div class="cell-status" id="status-${i}">
                     <span class="effect-name">-</span>
@@ -427,6 +457,7 @@ class RayLightApp {
                 this.drawIttenPercentages(targetCanvas, cached.status);
             }
 
+            this.drawOverlay(effectIdx);
             this.applyTransform();
             this.updateUI();
             return;
@@ -463,6 +494,7 @@ class RayLightApp {
                 this.drawIttenPercentages(targetCanvas, result.status);
             }
 
+            this.drawOverlay(effectIdx);
             this.applyTransform();
             this.updateUI();
         } catch (e) {
@@ -584,6 +616,209 @@ class RayLightApp {
         this.els.gridContainer.style.margin = 'auto';
     }
 
+    // === Overlay Grid Drawing ===
+
+    redrawOverlays() {
+        const count = this.getGridCount();
+        for (let i = 0; i < count; i++) {
+            this.drawOverlay(i);
+        }
+    }
+
+    drawOverlay(cellIndex) {
+        const overlay = document.getElementById(`overlay-${cellIndex}`);
+        const canvas = document.getElementById(`canvas-${cellIndex}`);
+        if (!overlay || !canvas) return;
+
+        const ctx = overlay.getContext('2d');
+
+        if (this.overlayGridType === 'none' || !canvas.width || !canvas.height) {
+            overlay.width = 0;
+            overlay.height = 0;
+            return;
+        }
+
+        const effect = this.activeEffects[cellIndex];
+        if (effect && (effect.type === 'histogram' || effect.type === 'itten_circle')) {
+            overlay.width = 0;
+            overlay.height = 0;
+            return;
+        }
+
+        overlay.width = canvas.width;
+        overlay.height = canvas.height;
+
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+        const w = overlay.width;
+        const h = overlay.height;
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.lineWidth = Math.max(1, Math.min(w, h) / 400);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.font = `bold ${Math.max(10, Math.min(w, h) / 40)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        switch (this.overlayGridType) {
+            case 'rule-of-thirds': this.drawRuleOfThirds(ctx, w, h); break;
+            case 'grid': this.drawGridLines(ctx, w, h, this.overlayGridSize); break;
+            case 'golden-ratio': this.drawGoldenRatio(ctx, w, h); break;
+            case 'diagonal': this.drawDiagonal(ctx, w, h); break;
+            case 'triangle': this.drawTriangle(ctx, w, h); break;
+            case 'golden-spiral': this.drawGoldenSpiral(ctx, w, h, this.overlaySpiralCorner); break;
+        }
+    }
+
+    drawRuleOfThirds(ctx, w, h) {
+        ctx.beginPath();
+        ctx.moveTo(w / 3, 0); ctx.lineTo(w / 3, h);
+        ctx.moveTo(2 * w / 3, 0); ctx.lineTo(2 * w / 3, h);
+        ctx.moveTo(0, h / 3); ctx.lineTo(w, h / 3);
+        ctx.moveTo(0, 2 * h / 3); ctx.lineTo(w, 2 * h / 3);
+        ctx.stroke();
+    }
+
+    drawGridLines(ctx, w, h, n) {
+        ctx.beginPath();
+        for (let i = 1; i < n; i++) {
+            ctx.moveTo(w * i / n, 0); ctx.lineTo(w * i / n, h);
+            ctx.moveTo(0, h * i / n); ctx.lineTo(w, h * i / n);
+        }
+        ctx.stroke();
+    }
+
+    drawGoldenRatio(ctx, w, h) {
+        const phi = 1.618;
+        const a = 1 / (phi * phi);
+        const b = 1 / phi;
+
+        ctx.beginPath();
+        // Vertical
+        ctx.moveTo(w * a, 0); ctx.lineTo(w * a, h);
+        ctx.moveTo(w * b, 0); ctx.lineTo(w * b, h);
+        // Horizontal
+        ctx.moveTo(0, h * a); ctx.lineTo(w, h * a);
+        ctx.moveTo(0, h * b); ctx.lineTo(w, h * b);
+        ctx.stroke();
+    }
+
+    drawDiagonal(ctx, w, h) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(w, h);
+        ctx.moveTo(w, 0); ctx.lineTo(0, h);
+        ctx.stroke();
+    }
+
+    drawTriangle(ctx, w, h) {
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(w, h);
+        ctx.moveTo(w, 0); ctx.lineTo(0, h);
+        // Lines from bottom corners to top midpoint
+        ctx.moveTo(0, h); ctx.lineTo(w / 2, 0);
+        ctx.moveTo(w, h); ctx.lineTo(w / 2, 0);
+        ctx.stroke();
+    }
+
+    drawGoldenSpiral(ctx, w, h, corner) {
+        const n = 11;
+
+        const fibs = [1, 1];
+        for (let i = 2; i < n; i++) fibs.push(fibs[i - 1] + fibs[i - 2]);
+
+        const scale = Math.min(w, h) * 0.8 / fibs[n - 1];
+
+        let eyeX, eyeY;
+        switch (corner) {
+            case 'top-left':
+                eyeX = w * 0.618; eyeY = h * 0.618;
+                break;
+            case 'top-right':
+                eyeX = w * 0.382; eyeY = h * 0.618;
+                break;
+            case 'bottom-left':
+                eyeX = w * 0.618; eyeY = h * 0.382;
+                break;
+            case 'bottom-right':
+            default:
+                eyeX = w * 0.382; eyeY = h * 0.382;
+                break;
+        }
+
+        const squares = [];
+        let size = fibs[0] * scale;
+        let x = eyeX - size / 2;
+        let y = eyeY - size / 2;
+        squares.push({ x, y, size });
+
+        let minX = x, minY = y, maxX = x + size, maxY = y + size;
+
+        for (let i = 1; i < n; i++) {
+            size = fibs[i] * scale;
+            const pDir = (i - 1) % 4;
+            let nx, ny;
+
+            if (pDir === 0) {
+                nx = maxX; ny = maxY - size; maxX = nx + size;
+            } else if (pDir === 1) {
+                nx = maxX - size; ny = minY - size; minY = ny;
+            } else if (pDir === 2) {
+                nx = minX - size; ny = minY; minX = nx;
+            } else {
+                nx = minX; ny = maxY; maxY = ny + size;
+            }
+
+            squares.push({ x: nx, y: ny, size });
+        }
+
+        ctx.save();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 1;
+        for (const s of squares) {
+            const right = s.x + s.size;
+            const bottom = s.y + s.size;
+            if (right < 0 || s.x > w || bottom < 0 || s.y > h) continue;
+            ctx.strokeRect(
+                Math.max(s.x, 0), Math.max(s.y, 0),
+                Math.min(s.size, w - Math.max(s.x, 0)),
+                Math.min(s.size, h - Math.max(s.y, 0))
+            );
+        }
+
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = Math.max(2, Math.min(4, Math.min(w, h) / 200));
+        ctx.shadowColor = '#FFD700';
+        ctx.shadowBlur = Math.max(4, Math.min(12, Math.min(w, h) / 80));
+        ctx.beginPath();
+
+        for (let i = 0; i < squares.length; i++) {
+            const s = squares[i];
+            const dir = i % 4;
+            let cx, cy, start, end;
+
+            if (dir === 0) {
+                cx = s.x; cy = s.y + s.size; start = 1.5 * Math.PI; end = 2.0 * Math.PI;
+            } else if (dir === 1) {
+                cx = s.x + s.size; cy = s.y + s.size; start = Math.PI; end = 1.5 * Math.PI;
+            } else if (dir === 2) {
+                cx = s.x + s.size; cy = s.y; start = 0.5 * Math.PI; end = Math.PI;
+            } else {
+                cx = s.x; cy = s.y; start = 0; end = 0.5 * Math.PI;
+            }
+
+            if (i === 0) {
+                ctx.moveTo(cx + s.size * Math.cos(start), cy + s.size * Math.sin(start));
+            }
+            ctx.arc(cx, cy, s.size, start, end, false);
+        }
+
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // === End Overlay Grid Drawing ===
+
     drawIttenPercentages(canvas, status) {
         const ctx = canvas.getContext('2d');
         const statusPart = status.split(': ')[1].split(' (')[0].trim();
@@ -636,6 +871,7 @@ class RayLightApp {
 
         for (let i = 0; i < count; i++) {
             const canvas = document.getElementById(`canvas-${i}`);
+            const overlay = document.getElementById(`overlay-${i}`);
             if (canvas) {
                 const effect = this.activeEffects[i];
                 const isAnalysis = effect && (effect.type === 'histogram' || effect.type === 'itten_circle');
@@ -647,13 +883,18 @@ class RayLightApp {
 
                     if (isAnalysis) {
                         canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
+                        if (overlay) overlay.style.transform = canvas.style.transform;
                     } else {
                         this.zoom = scale;
                         this.pan = { x: 0, y: 0 };
-                        canvas.style.transform = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                        const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                        canvas.style.transform = t;
+                        if (overlay) overlay.style.transform = t;
                     }
                 } else {
-                    canvas.style.transform = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                    const t = `translate(-50%, -50%) translate(${this.pan.x}px, ${this.pan.y}px) rotate(${this.rotation}deg) scale(${this.zoom * this.flipH}, ${this.zoom * this.flipV})`;
+                    canvas.style.transform = t;
+                    if (overlay) overlay.style.transform = t;
                 }
             }
         }
@@ -707,6 +948,9 @@ class RayLightApp {
         const settings = {
             gridType: this.gridType,
             fitGridToAspect: this.fitGridToAspect,
+            overlayGridType: this.overlayGridType,
+            overlayGridSize: this.overlayGridSize,
+            overlaySpiralCorner: this.overlaySpiralCorner,
             activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
@@ -722,6 +966,17 @@ class RayLightApp {
 
                 this.fitGridToAspect = settings.fitGridToAspect ?? true;
                 this.els.fitAspectToggle.checked = this.fitGridToAspect;
+
+                this.overlayGridType = settings.overlayGridType || 'none';
+                this.els.overlayGridSelect.value = this.overlayGridType;
+                this.els.overlayGridSizeGroup.style.display = this.overlayGridType === 'grid' ? '' : 'none';
+                this.els.overlaySpiralCornerGroup.style.display = this.overlayGridType === 'golden-spiral' ? '' : 'none';
+
+                this.overlayGridSize = settings.overlayGridSize || 3;
+                this.els.overlayGridSize.value = this.overlayGridSize;
+
+                this.overlaySpiralCorner = settings.overlaySpiralCorner || 'bottom-right';
+                this.els.overlaySpiralCorner.value = this.overlaySpiralCorner;
 
                 this.activeEffects = (settings.activeEffects || []).map(e => ({
                     id: Math.random(),
