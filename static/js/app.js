@@ -117,7 +117,10 @@ class RayLightApp {
         window.addEventListener('mouseup', () => isResizing = false);
 
         // Window resize
-        window.addEventListener('resize', () => this.updateGridSize());
+        window.addEventListener('resize', () => {
+            this.updateGridSize();
+            this.applyTransform();
+        });
 
         // Zoom & Pan
         this.els.gridContainer.addEventListener('wheel', (e) => {
@@ -178,21 +181,13 @@ class RayLightApp {
             activeEffectsList: document.getElementById('active-effects'),
             palette: document.getElementById('available-effects'),
             filenameInfo: document.getElementById('current-filename'),
-            zoomInfo: document.getElementById('current-zoom'),
+            zoomInfo: document.getElementById('zoom-info'),
             indexInfo: document.getElementById('index-info'),
             prevBtn: document.getElementById('prev-btn'),
             nextBtn: document.getElementById('next-btn'),
             effectLimitMsg: document.getElementById('effect-limit-msg'),
             fitAspectToggle: document.getElementById('fit-aspect-toggle')
         };
-
-        // Add a message about auto/manual mode
-        const zoomHint = document.createElement('div');
-        zoomHint.style.fontSize = '10px';
-        zoomHint.style.color = '#888';
-        zoomHint.style.marginTop = '2px';
-        zoomHint.textContent = 'Зум/панорама: ручной режим. Двойной клик: авто.';
-        this.els.zoomInfo.parentElement.appendChild(zoomHint);
     }
 
     initPalette() {
@@ -393,10 +388,8 @@ class RayLightApp {
                 this.drawIttenPercentages(targetCanvas, cached.status);
             }
 
-            if (this.zoomMode === 'auto') {
-                this.applyTransform();
-                this.updateUI();
-            }
+            this.applyTransform();
+            this.updateUI();
             return;
         }
 
@@ -420,12 +413,8 @@ class RayLightApp {
                 this.drawIttenPercentages(targetCanvas, result.status);
             }
 
-            // If we are in auto mode, we might need to re-apply transform
-            // since image dimensions might have changed
-            if (this.zoomMode === 'auto') {
-                this.applyTransform();
-                this.updateUI();
-            }
+            this.applyTransform();
+            this.updateUI();
         } catch (e) {
             console.error(e);
             if (statusEl) statusEl.textContent = 'ошибка';
@@ -609,7 +598,7 @@ class RayLightApp {
         this.els.filenameInfo.textContent = filename;
         this.els.indexInfo.textContent = indexStr;
         const modeRu = this.zoomMode === 'auto' ? 'авто' : 'ручной';
-        this.els.zoomInfo.textContent = `${Math.round(this.zoom * 100)}% [${modeRu}]`;
+        this.els.zoomInfo.textContent = `Масштаб: ${Math.round(this.zoom * 100)}% (${modeRu})`;
 
         document.title = filename !== '-' ? `${filename} (${indexStr}) | Ray-Light` : 'Ray-Light';
     }
