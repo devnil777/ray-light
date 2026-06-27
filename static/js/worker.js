@@ -136,12 +136,13 @@ const effects = {
         }
 
         const margin = 20;
+        const marginBottom = 40; // Extra margin for status bar
         const availableWidth = width - 2 * margin;
-        const availableHeight = height - 2 * margin;
+        const availableHeight = height - margin - marginBottom;
 
         const drawGraph = (hist, colorIdx, heightPercent, offsetPercent) => {
             const h = availableHeight * heightPercent;
-            const yOffset = margin + availableHeight * offsetPercent;
+            const yOffset = marginBottom + availableHeight * offsetPercent;
             for (let x = 0; x < 256; x++) {
                 const barHeight = (hist[x] / max) * h;
                 const xPosStart = margin + Math.floor((x / 256) * availableWidth);
