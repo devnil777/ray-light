@@ -14,10 +14,14 @@ class RayLightApp {
         this.fitGridToAspect = true;
         this.activeEffects = [];
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
+        this.blobCache = new Map(); // filename -> Blob (avoid re-fetch for worker)
         this.workers = [];
-        this.workerCount = 1; // Strictly sequential processing to save memory
-        this.taskQueue = [];
+        this.workerCount = 1;
+        this.workerBusy = false;
+        this.pendingTask = null; // single next task (replaces queue)
         this.activeTasks = new Map();
+        this.navigationGeneration = 0;
+        this.lastNavigationDir = 1;
 
         this.init();
     }
@@ -42,7 +46,7 @@ class RayLightApp {
         for (let i = 0; i < this.workerCount; i++) {
             const worker = new Worker('js/worker.js');
             worker.onmessage = (e) => this.handleWorkerMessage(e.data);
-            this.workers.push({ worker, busy: false });
+            this.workers.push(worker);
         }
     }
 
@@ -52,6 +56,7 @@ class RayLightApp {
             this.gridType = e.target.value;
             this.renderGrid();
             this.limitEffects();
+            this.cancelPending();
             this.updateCurrentImages();
             this.saveSettings();
         });
@@ -164,6 +169,7 @@ class RayLightApp {
             handle: '.effect-header',
             onEnd: () => {
                 this.updateEffectsFromDOM();
+                this.cancelPending();
                 this.clearCache();
                 this.updateCurrentImages();
                 this.saveSettings();
@@ -262,6 +268,7 @@ class RayLightApp {
 
         this.activeEffects.push(effectInstance);
         this.renderActiveEffects();
+        this.cancelPending();
         this.clearCache();
         this.updateCurrentImages();
         this.saveSettings();
@@ -305,6 +312,7 @@ class RayLightApp {
             li.querySelector('.remove-eff').onclick = () => {
                 this.activeEffects = this.activeEffects.filter(e => e.id !== eff.id);
                 this.renderActiveEffects();
+                this.cancelPending();
                 this.clearCache();
                 this.updateCurrentImages();
                 this.saveSettings();
@@ -313,6 +321,7 @@ class RayLightApp {
             li.querySelectorAll('input, select').forEach(input => {
                 input.onchange = (e) => {
                     eff.params[e.target.dataset.param] = e.target.value;
+                    this.cancelPending();
                     this.clearCache();
                     this.updateCurrentImages();
                     this.saveSettings();
@@ -334,13 +343,28 @@ class RayLightApp {
         this.renderActiveEffects();
     }
 
+    cancelPending() {
+        this.navigationGeneration++;
+        if (this.pendingTask) {
+            this.pendingTask.resolve(null);
+            this.pendingTask = null;
+        }
+        this.blobCache.clear();
+    }
+
     async navigate(dir) {
         const newIndex = this.currentIndex + dir;
         if (newIndex >= 0 && newIndex < this.images.length) {
+            this.navigationGeneration++;
+            this.lastNavigationDir = dir;
+            if (this.pendingTask) {
+                this.pendingTask.resolve(null);
+                this.pendingTask = null;
+            }
             this.currentIndex = newIndex;
             this.updateUI();
             await this.updateCurrentImages();
-            this.preloadAround();
+            this.preloadAround(dir);
         }
     }
 
@@ -349,14 +373,26 @@ class RayLightApp {
         const filename = this.images[this.currentIndex];
         if (!filename) return;
 
-        // Load first image to get aspect ratio if needed
+        const generation = this.navigationGeneration;
+
+        let blob = null;
         if (this.images.length > 0) {
-            const img = await this.loadImageFile(filename);
-            this.currentImageAspect = img.width / img.height;
-            this.updateGridSize();
+            try {
+                blob = await this.loadImageBlob(filename);
+                if (generation !== this.navigationGeneration) return;
+                this.blobCache.set(filename, blob);
+                const imgBitmap = await createImageBitmap(blob);
+                this.currentImageAspect = imgBitmap.width / imgBitmap.height;
+                imgBitmap.close();
+                this.updateGridSize();
+            } catch (e) {
+                console.error("Failed to load image aspect ratio", e);
+            }
         }
 
         for (let i = 0; i < count; i++) {
+            if (generation !== this.navigationGeneration) return;
+
             const canvas = document.getElementById(`canvas-${i}`);
             const status = document.getElementById(`status-${i}`);
             if (!canvas) continue;
@@ -372,14 +408,17 @@ class RayLightApp {
             canvas.style.display = 'block';
             status.querySelector('.effect-name').textContent = effects[effect.type].name;
 
-            await this.processImage(filename, i, effect, canvas, status.querySelector('.process-info'));
+            await this.processImage(filename, i, effect, canvas, status.querySelector('.process-info'), generation);
         }
     }
 
-    async processImage(filename, effectIdx, effect, targetCanvas, statusEl) {
+    async processImage(filename, effectIdx, effect, targetCanvas, statusEl, generation) {
+        if (generation === undefined) generation = this.navigationGeneration;
+
         // Check cache
         const cacheKey = `${filename}_${effectIdx}`;
         if (this.cache.has(cacheKey)) {
+            if (generation !== this.navigationGeneration) return;
             const cached = this.cache.get(cacheKey);
             this.copyCanvas(cached.canvas, targetCanvas);
             if (statusEl) statusEl.textContent = cached.status + ' (кэш)';
@@ -396,17 +435,28 @@ class RayLightApp {
         if (statusEl) statusEl.textContent = 'обработка...';
 
         try {
-            const result = await this.runWorker(filename, effect.type, effect.params);
-            if (!result) throw new Error("Processing failed");
+            // Reuse blob from blobCache or fetch fresh
+            let blob = this.blobCache.get(filename);
+            if (!blob) {
+                blob = await this.loadImageBlob(filename);
+                if (generation !== this.navigationGeneration) return;
+                this.blobCache.set(filename, blob);
+            }
+
+            const result = await this.runWorker(blob, effect.type, effect.params, generation);
+            if (!result || generation !== this.navigationGeneration) return;
 
             const offscreen = document.createElement('canvas');
             offscreen.width = result.imageData.width;
             offscreen.height = result.imageData.height;
             offscreen.getContext('2d').putImageData(result.imageData, 0, 0);
 
-            this.cache.set(cacheKey, { canvas: offscreen, status: result.status });
+            const cached = this.downscaleToDisplay(offscreen);
+            this.cache.set(cacheKey, { canvas: cached, status: result.status });
+            this.pruneCache();
 
-            this.copyCanvas(offscreen, targetCanvas);
+            if (generation !== this.navigationGeneration) return;
+            this.copyCanvas(cached, targetCanvas);
             if (statusEl) statusEl.textContent = result.status;
 
             if (effect.type === 'itten_circle' && result.status.includes('Круг Иттена:')) {
@@ -421,60 +471,88 @@ class RayLightApp {
         }
     }
 
-    loadImageFile(filename) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = `/api/image/${filename}`;
-        });
+    pruneCache() {
+        const allowedFilenames = new Set();
+        for (let i = -2; i <= 2; i++) {
+            const idx = this.currentIndex + i;
+            if (idx >= 0 && idx < this.images.length) {
+                allowedFilenames.add(this.images[idx]);
+            }
+        }
+        for (const key of this.cache.keys()) {
+            const filename = key.substring(0, key.lastIndexOf('_'));
+            if (!allowedFilenames.has(filename)) {
+                this.cache.delete(key);
+            }
+        }
+        for (const filename of this.blobCache.keys()) {
+            if (!allowedFilenames.has(filename)) {
+                this.blobCache.delete(filename);
+            }
+        }
     }
 
-    runWorker(filename, effectType, params) {
+    async loadImageBlob(filename) {
+        const resp = await fetch(`/api/image/${filename}`);
+        if (!resp.ok) throw new Error(`Failed to fetch image ${filename}`);
+        return await resp.blob();
+    }
+
+    runWorker(blob, effectType, params, generation) {
+        if (generation === undefined) generation = this.navigationGeneration;
         return new Promise((resolve) => {
             const taskId = Math.random();
-            // Store request details instead of ImageData to prevent memory spikes
-            this.taskQueue.push({ filename, effectType, params, taskId, resolve });
-            this.processQueue();
+            const task = { blob, effectType, params, taskId, resolve, generation };
+
+            if (this.workerBusy) {
+                // Replace pending: only the latest task matters
+                if (this.pendingTask) {
+                    this.pendingTask.resolve(null);
+                }
+                this.pendingTask = task;
+            } else {
+                this.sendToWorker(task);
+            }
         });
     }
 
-    async processQueue() {
-        const availableWorker = this.workers.find(w => !w.busy);
-        if (availableWorker && this.taskQueue.length > 0) {
-            const task = this.taskQueue.shift();
-            availableWorker.busy = true;
+    sendToWorker(task) {
+        this.workerBusy = true;
+        this.activeTasks.set(task.taskId, { resolve: task.resolve, generation: task.generation });
+        this.workers[0].postMessage({
+            imageBlob: task.blob,
+            effectType: task.effectType,
+            params: task.params,
+            taskId: task.taskId
+        });
+    }
 
-            try {
-                // Load and prepare image data ONLY when worker is ready
-                const img = await this.loadImageFile(task.filename);
-                const offscreen = document.createElement('canvas');
-                offscreen.width = img.width;
-                offscreen.height = img.height;
-                const ctx = offscreen.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const imageData = ctx.getImageData(0, 0, img.width, img.height);
+    handleWorkerMessage(data) {
+        const { imageData, status, taskId, error } = data;
+        const task = this.activeTasks.get(taskId);
+        if (!task) return;
 
-                this.activeTasks.set(task.taskId, { resolve: task.resolve, worker: availableWorker });
-                availableWorker.worker.postMessage({
-                    imageData: imageData,
-                    effectType: task.effectType,
-                    params: task.params,
-                    taskId: task.taskId
-                }, [imageData.data.buffer]);
-            } catch (e) {
-                console.error("Task failed", e);
-                availableWorker.busy = false;
-                task.resolve(null);
-                this.processQueue();
-            }
+        this.activeTasks.delete(taskId);
+        this.workerBusy = false;
+
+        if (error || !imageData || task.generation !== this.navigationGeneration) {
+            task.resolve(null);
+        } else {
+            task.resolve({ imageData, status });
+        }
+
+        // Process pending task if still current
+        if (this.pendingTask && this.pendingTask.generation === this.navigationGeneration) {
+            const next = this.pendingTask;
+            this.pendingTask = null;
+            this.sendToWorker(next);
         }
     }
 
     updateGridSize() {
         const workspace = this.els.workspace;
         const statusBar = document.getElementById('status-bar');
-        const availableWidth = workspace.clientWidth - 20; // 10px padding * 2
+        const availableWidth = workspace.clientWidth - 20;
         const availableHeight = workspace.clientHeight - statusBar.clientHeight - 20;
 
         if (!this.currentImageAspect || !this.fitGridToAspect) {
@@ -493,11 +571,9 @@ class RayLightApp {
         let gridWidth, gridHeight;
 
         if (gridAspect > workspaceAspect) {
-            // Grid is wider than workspace -> side margins
             gridWidth = availableWidth;
             gridHeight = availableWidth / gridAspect;
         } else {
-            // Grid is taller than workspace -> top/bottom margins
             gridHeight = availableHeight;
             gridWidth = availableHeight * gridAspect;
         }
@@ -508,20 +584,8 @@ class RayLightApp {
         this.els.gridContainer.style.margin = 'auto';
     }
 
-    handleWorkerMessage(data) {
-        const { imageData, status, taskId } = data;
-        const task = this.activeTasks.get(taskId);
-        if (task) {
-            task.worker.busy = false;
-            this.activeTasks.delete(taskId);
-            task.resolve({ imageData, status });
-            this.processQueue();
-        }
-    }
-
     drawIttenPercentages(canvas, status) {
         const ctx = canvas.getContext('2d');
-        // Extract only the percentages part, ignoring the processing time in parentheses
         const statusPart = status.split(': ')[1].split(' (')[0].trim();
         const percents = statusPart.split('% ').map(s => s.replace('%', ''));
         const centerX = canvas.width / 2;
@@ -543,7 +607,6 @@ class RayLightApp {
             const x = centerX + Math.cos(angle) * radius;
             const y = centerY + Math.sin(angle) * radius;
 
-            // Invert color logic
             const bg = ittenColors[i];
             const invR = 255 - bg[0], invG = 255 - bg[1], invB = 255 - bg[2];
             ctx.fillStyle = `rgb(${invR}, ${invG}, ${invB})`;
@@ -557,6 +620,10 @@ class RayLightApp {
         dest.height = src.height;
         const ctx = dest.getContext('2d');
         ctx.drawImage(src, 0, 0);
+    }
+
+    downscaleToDisplay(fullResCanvas) {
+        return fullResCanvas;
     }
 
     applyTransform() {
@@ -579,7 +646,6 @@ class RayLightApp {
                     const scale = Math.min(scaleX, scaleY);
 
                     if (isAnalysis) {
-                        // Analysis effects are always centered and fitted, ignoring manual zoom/pan/rotation
                         canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
                     } else {
                         this.zoom = scale;
@@ -607,27 +673,32 @@ class RayLightApp {
 
     clearCache() {
         this.cache.clear();
+        this.blobCache.clear();
     }
 
-    preloadAround() {
-        const range = 2;
-        for (let i = 1; i <= range; i++) {
-            this.preloadImage(this.currentIndex + i);
-            this.preloadImage(this.currentIndex - i);
-        }
+    preloadAround(dir) {
+        const start = dir > 0 ? this.currentIndex + 1 : this.currentIndex - 1;
+        const step = dir > 0 ? 1 : -1;
+        (async () => {
+            for (let offset = 0; offset < 2; offset++) {
+                const idx = start + step * offset;
+                if (idx < 0 || idx >= this.images.length) break;
+                await this.preloadImage(idx);
+            }
+        })();
     }
 
     async preloadImage(idx) {
         if (idx < 0 || idx >= this.images.length) return;
         const filename = this.images[idx];
+        const generation = this.navigationGeneration;
 
-        // Preload for all current effects
         for (let i = 0; i < this.activeEffects.length; i++) {
+            if (generation !== this.navigationGeneration) return;
             const cacheKey = `${filename}_${i}`;
             if (!this.cache.has(cacheKey)) {
                 const effect = this.activeEffects[i];
-                // We don't need a canvas, just populate cache
-                this.processImage(filename, i, effect, document.createElement('canvas'), null);
+                await this.processImage(filename, i, effect, document.createElement('canvas'), null, generation);
             }
         }
     }

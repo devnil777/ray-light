@@ -396,16 +396,32 @@ function jetColormap(t) {
     ];
 }
 
-self.onmessage = function(e) {
-    const { imageData, effectType, params, taskId } = e.data;
+self.onmessage = async function(e) {
+    const { imageBlob, effectType, params, taskId } = e.data;
 
     const startTime = performance.now();
 
     let result;
-    if (effects[effectType]) {
-        result = effects[effectType](imageData, params);
-    } else {
-        result = { imageData, status: "Unknown effect" };
+    try {
+        const imageBitmap = await createImageBitmap(imageBlob);
+        const offscreen = new OffscreenCanvas(imageBitmap.width, imageBitmap.height);
+        const ctx = offscreen.getContext('2d');
+        ctx.drawImage(imageBitmap, 0, 0);
+        const imageData = ctx.getImageData(0, 0, imageBitmap.width, imageBitmap.height);
+        imageBitmap.close(); // Clean up graphics memory immediately
+
+        if (effects[effectType]) {
+            result = effects[effectType](imageData, params);
+        } else {
+            result = { imageData, status: "Unknown effect" };
+        }
+    } catch (err) {
+        console.error("Worker processing failed:", err);
+        self.postMessage({
+            error: err.message,
+            taskId: taskId
+        });
+        return;
     }
 
     const endTime = performance.now();
