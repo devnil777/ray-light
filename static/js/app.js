@@ -10,8 +10,6 @@ class RayLightApp {
         this.rotation = 0;
         this.flipH = 1;
         this.flipV = 1;
-        this.gridType = '1';
-        this.fitGridToAspect = true;
         this.activeEffects = [];
         this.cache = new Map(); // filename_effectIdx -> { canvas, status }
         this.blobCache = new Map(); // filename -> Blob (avoid re-fetch for worker)
@@ -22,6 +20,7 @@ class RayLightApp {
         this.activeTasks = new Map();
         this.navigationGeneration = 0;
         this.lastNavigationDir = 1;
+        this._prevLayout = null;
 
         this.init();
     }
@@ -73,23 +72,6 @@ class RayLightApp {
     }
 
     initEventListeners() {
-        // Grid resize
-        this.els.gridSelect.addEventListener('change', (e) => {
-            this.gridType = e.target.value;
-            this.renderGrid();
-            this.limitEffects();
-            this.cancelPending();
-            this.updateCurrentImages();
-            this.saveSettings();
-        });
-
-        this.els.fitAspectToggle.addEventListener('change', (e) => {
-            this.fitGridToAspect = e.target.checked;
-            this.updateGridSize();
-            this.applyTransform();
-            this.saveSettings();
-        });
-
         // Background picker
         document.querySelectorAll('.bg-swatch').forEach(swatch => {
             swatch.addEventListener('click', () => {
@@ -145,8 +127,11 @@ class RayLightApp {
 
         // Window resize
         window.addEventListener('resize', () => {
-            this.updateGridSize();
-            this.applyTransform();
+            if (this.recomputeLayout()) {
+                this.cancelPending();
+                this.clearCache();
+                this.updateCurrentImages();
+            }
         });
 
         // Zoom & Pan
@@ -205,7 +190,6 @@ class RayLightApp {
             gridContainer: document.getElementById('grid-container'),
             sidebar: document.getElementById('sidebar'),
             resizer: document.getElementById('resizer'),
-            gridSelect: document.getElementById('grid-select'),
             activeEffectsList: document.getElementById('active-effects'),
             palette: document.getElementById('available-effects'),
             filenameInfo: document.getElementById('current-filename'),
@@ -213,8 +197,7 @@ class RayLightApp {
             indexInfo: document.getElementById('index-info'),
             prevBtn: document.getElementById('prev-btn'),
             nextBtn: document.getElementById('next-btn'),
-            effectLimitMsg: document.getElementById('effect-limit-msg'),
-            fitAspectToggle: document.getElementById('fit-aspect-toggle')
+            effectLimitMsg: document.getElementById('effect-limit-msg')
         };
     }
 
@@ -238,14 +221,81 @@ class RayLightApp {
         }
     }
 
+    computeGridLayout() {
+        const n = this.activeEffects.length;
+        if (n <= 0) return { cols: 1, rows: 1, total: 1 };
+        if (n === 1) return { cols: 1, rows: 1, total: 1 };
+
+        const ar = this.currentImageAspect;
+        if (!ar) {
+            let best = null;
+            for (let cols = 1; cols <= 3; cols++) {
+                for (let rows = 1; rows <= 3; rows++) {
+                    if (cols * rows < n) continue;
+                    const waste = cols * rows - n;
+                    const balanced = Math.abs(cols - rows);
+                    const preferCols = cols >= rows;
+                    if (!best || waste < best.waste ||
+                        (waste === best.waste && preferCols && !best.preferCols) ||
+                        (waste === best.waste && preferCols === best.preferCols && balanced < best.balanced)) {
+                        best = { cols, rows, total: cols * rows, waste, balanced, preferCols };
+                    }
+                }
+            }
+            return best || { cols: 1, rows: 1, total: 1 };
+        }
+
+        const availW = this.els.workspace.clientWidth - 20;
+        const statusBar = document.getElementById('status-bar');
+        const availH = this.els.workspace.clientHeight - statusBar.clientHeight - 20;
+        const wsAr = availW / availH;
+
+        let best = null;
+        let bestCoverage = -1;
+
+        for (let cols = 1; cols <= 3; cols++) {
+            for (let rows = 1; rows <= 3; rows++) {
+                if (cols * rows < n) continue;
+
+                const gridAr = (ar * cols) / rows;
+                let gridW, gridH;
+                if (gridAr > wsAr) {
+                    gridW = availW;
+                    gridH = availW / gridAr;
+                } else {
+                    gridH = availH;
+                    gridW = availH * gridAr;
+                }
+
+                const cellW = gridW / cols;
+                const cellH = gridH / rows;
+                const scale = Math.min(cellW / ar, cellH);
+                const coverage = n * ar * scale * scale;
+
+                if (coverage > bestCoverage) {
+                    bestCoverage = coverage;
+                    best = { cols, rows, total: cols * rows };
+                }
+            }
+        }
+
+        return best || { cols: 1, rows: 1, total: 1 };
+    }
+
     renderGrid() {
         this.els.gridContainer.innerHTML = '';
-        const count = this.getGridCount();
-        this.els.gridContainer.className = `grid-${this.gridType}`;
+        const layout = this.computeGridLayout();
+        const count = Math.max(this.activeEffects.length, 1);
+        const gap = 10;
+
+        const cellWidth = `calc((100% - ${(layout.cols - 1) * gap}px) / ${layout.cols})`;
+        const cellHeight = `calc((100% - ${(layout.rows - 1) * gap}px) / ${layout.rows})`;
 
         for (let i = 0; i < count; i++) {
             const cell = document.createElement('div');
             cell.className = 'grid-cell';
+            cell.style.width = cellWidth;
+            cell.style.height = cellHeight;
             cell.innerHTML = `
                 <div class="canvas-container" id="container-${i}">
                     <canvas id="canvas-${i}"></canvas>
@@ -261,20 +311,26 @@ class RayLightApp {
         this.applyTransform();
     }
 
-    getGridCount() {
-        if (this.gridType === '1') return 1;
-        const [w, h] = this.gridType.split('x').map(Number);
-        return w * h;
-    }
+    recomputeLayout() {
+        const layout = this.computeGridLayout();
+        const count = Math.max(this.activeEffects.length, 1);
+        const currentCells = this.els.gridContainer.children.length;
+        const sameGrid = this._prevLayout && this._prevLayout.cols === layout.cols && this._prevLayout.rows === layout.rows;
+        const sameCount = currentCells === count;
 
-    getGridDimensions() {
-        if (this.gridType === '1') return [1, 1];
-        return this.gridType.split('x').map(Number);
+        if (sameGrid && sameCount) {
+            this.updateGridSize();
+            this.applyTransform();
+            return false;
+        } else {
+            this.renderGrid();
+            this._prevLayout = { cols: layout.cols, rows: layout.rows };
+            return true;
+        }
     }
 
     addEffect(type) {
-        const count = this.getGridCount();
-        if (this.activeEffects.length >= count) {
+        if (this.activeEffects.length >= 9) {
             this.els.effectLimitMsg.style.display = 'block';
             setTimeout(() => this.els.effectLimitMsg.style.display = 'none', 3000);
             return;
@@ -289,19 +345,12 @@ class RayLightApp {
         effectDef.params.forEach(p => effectInstance.params[p.name] = p.default);
 
         this.activeEffects.push(effectInstance);
+        this.recomputeLayout();
         this.renderActiveEffects();
         this.cancelPending();
         this.clearCache();
         this.updateCurrentImages();
         this.saveSettings();
-    }
-
-    limitEffects() {
-        const count = this.getGridCount();
-        if (this.activeEffects.length > count) {
-            this.activeEffects = this.activeEffects.slice(0, count);
-            this.renderActiveEffects();
-        }
     }
 
     renderActiveEffects() {
@@ -333,6 +382,7 @@ class RayLightApp {
 
             li.querySelector('.remove-eff').onclick = () => {
                 this.activeEffects = this.activeEffects.filter(e => e.id !== eff.id);
+                this.recomputeLayout();
                 this.renderActiveEffects();
                 this.cancelPending();
                 this.clearCache();
@@ -391,7 +441,7 @@ class RayLightApp {
     }
 
     async updateCurrentImages() {
-        const count = this.getGridCount();
+        const count = Math.max(this.activeEffects.length, 1);
         const filename = this.images[this.currentIndex];
         if (!filename) return;
 
@@ -406,7 +456,7 @@ class RayLightApp {
                 const imgBitmap = await createImageBitmap(blob);
                 this.currentImageAspect = imgBitmap.width / imgBitmap.height;
                 imgBitmap.close();
-                this.updateGridSize();
+                this.recomputeLayout();
             } catch (e) {
                 console.error("Failed to load image aspect ratio", e);
             }
@@ -569,7 +619,7 @@ class RayLightApp {
         const availableWidth = workspace.clientWidth - 20;
         const availableHeight = workspace.clientHeight - statusBar.clientHeight - 20;
 
-        if (!this.currentImageAspect || !this.fitGridToAspect) {
+        if (!this.currentImageAspect) {
             this.els.gridContainer.style.width = '100%';
             this.els.gridContainer.style.height = '100%';
             this.els.gridContainer.style.flex = '1';
@@ -577,7 +627,9 @@ class RayLightApp {
             return;
         }
 
-        const [cols, rows] = this.getGridDimensions();
+        const layout = this.computeGridLayout();
+        const cols = layout.cols;
+        const rows = layout.rows;
         const gridAspect = (this.currentImageAspect * cols) / rows;
 
         const workspaceAspect = availableWidth / availableHeight;
@@ -612,7 +664,7 @@ class RayLightApp {
     }
 
     applyTransform() {
-        const count = this.getGridCount();
+        const count = Math.max(this.activeEffects.length, 1);
         const container = document.querySelector('.canvas-container');
         if (!container) return;
 
@@ -692,8 +744,6 @@ class RayLightApp {
 
     saveSettings() {
         const settings = {
-            gridType: this.gridType,
-            fitGridToAspect: this.fitGridToAspect,
             activeEffects: this.activeEffects.map(e => ({ type: e.type, params: e.params }))
         };
         localStorage.setItem('ray_light_settings', JSON.stringify(settings));
@@ -713,12 +763,6 @@ class RayLightApp {
         if (!settings) return;
 
         try {
-            this.gridType = settings.gridType || '1';
-            this.els.gridSelect.value = this.gridType;
-
-            this.fitGridToAspect = settings.fitGridToAspect ?? true;
-            this.els.fitAspectToggle.checked = this.fitGridToAspect;
-
             this.activeEffects = (settings.activeEffects || []).map(e => ({
                 id: Math.random(),
                 type: e.type,

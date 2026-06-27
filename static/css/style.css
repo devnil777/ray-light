@@ -71,19 +71,15 @@ body {
 .bg-5 { background-color: #000000; --status-text: #fff; }
 
 #grid-container {
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: center;
     gap: 10px;
-    align-items: center;
-    justify-items: center;
     overflow: hidden;
     position: relative;
     box-sizing: border-box;
 }
-
-.grid-1 { grid-template-columns: 1fr; }
-.grid-2x2 { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
-.grid-3x2 { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); }
-.grid-3x3 { grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
 
 .grid-cell {
     width: 100%;

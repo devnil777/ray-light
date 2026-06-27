@@ -13,7 +13,7 @@
 <body class="theme-dark bg-3">
     <div id="app">
         <main id="workspace">
-            <div id="grid-container" class="grid-1">
+            <div id="grid-container">
                 <!-- Images will be injected here -->
             </div>
 
@@ -55,31 +55,14 @@
                     </div>
                 </div>
 
-                <div class="control-group">
-                    <label>Сетка</label>
-                    <select id="grid-select">
-                        <option value="1">1 (Одно окно)</option>
-                        <option value="2x2">2x2 (4 ячейки)</option>
-                        <option value="3x2">3x2 (6 ячеек)</option>
-                        <option value="3x3">3x3 (9 ячеек)</option>
-                    </select>
-                </div>
-
-                <div class="control-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="fit-aspect-toggle" checked>
-                        <span>Ячейки по размеру фото</span>
-                    </label>
-                </div>
             </section>
-
             <section class="panel">
                 <h3><i class="fas fa-magic"></i> Список эффектов</h3>
                 <ul id="active-effects" class="sortable-list">
                     <!-- Active effects will be here -->
                 </ul>
                 <div class="info-text" id="effect-limit-msg" style="display: none;">
-                    Достигнут предел эффектов для выбранной сетки
+                    Максимум 9 эффектов
                 </div>
             </section>
 
