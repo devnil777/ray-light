@@ -16,7 +16,11 @@ export const effects = {
     channels: {
         name: "Каналы RGB",
         params: [
-            { name: "channel", type: "select", options: ["R", "G", "B"], default: "R" }
+            { name: "channel", label: "Канал", type: "select", options: [
+                { value: "R", label: "Красный" },
+                { value: "G", label: "Зелёный" },
+                { value: "B", label: "Синий" }
+            ], default: "R" }
         ],
         apply: (imageData, params) => {
             const data = imageData.data;
@@ -36,7 +40,11 @@ export const effects = {
     grayscale_channel: {
         name: "Канал (ЧБ)",
         params: [
-            { name: "channel", type: "select", options: ["R", "G", "B"], default: "R" }
+            { name: "channel", label: "Канал", type: "select", options: [
+                { value: "R", label: "Красный" },
+                { value: "G", label: "Зелёный" },
+                { value: "B", label: "Синий" }
+            ], default: "R" }
         ],
         apply: (imageData, params) => {
             const data = imageData.data;
@@ -70,7 +78,7 @@ export const effects = {
     exposure: {
         name: "Экспозиция",
         params: [
-            { name: "stops", type: "number", default: 0, step: 0.1 }
+            { name: "stops", label: "Ступени (EV)", type: "number", default: 0, step: 0.1 }
         ],
         apply: (imageData, params) => {
             const data = imageData.data;
@@ -89,8 +97,8 @@ export const effects = {
     clipping: {
         name: "Пересветы и тени",
         params: [
-            { name: "high", type: "number", default: 254, min: 0, max: 255 },
-            { name: "low", type: "number", default: 1, min: 0, max: 255 }
+            { name: "high", label: "Порог верха", type: "number", default: 254, min: 0, max: 255 },
+            { name: "low", label: "Порог низа", type: "number", default: 1, min: 0, max: 255 }
         ],
         apply: (imageData, params) => {
             const data = imageData.data;
@@ -125,7 +133,7 @@ export const effects = {
     focus_peaking: {
         name: "Зоны фокуса",
         params: [
-            { name: "threshold", type: "number", default: 30, min: 0, max: 255 }
+            { name: "threshold", label: "Порог", type: "number", default: 30, min: 0, max: 255 }
         ],
         apply: (imageData, params) => {
             // Logic moved to worker
@@ -136,6 +144,7 @@ export const effects = {
     histogram: {
         name: "Гистограмма",
         params: [],
+        analysis: true,
         apply: (imageData, params) => {
             // Logic moved to worker
             return { imageData, status: "Гистограмма" };
@@ -145,6 +154,7 @@ export const effects = {
     itten_circle: {
         name: "Круг Иттена",
         params: [],
+        analysis: true,
         apply: (imageData, params) => {
             // Logic moved to worker
             return { imageData, status: "Круг Иттена" };
@@ -154,7 +164,7 @@ export const effects = {
     texture_loss: {
         name: "Детектор текстур",
         params: [
-            { name: "windowSize", type: "number", default: 15, min: 3, max: 51, step: 2 }
+            { name: "windowSize", label: "Размер окна", type: "number", default: 15, min: 3, max: 51, step: 2 }
         ],
         apply: (imageData, params) => {
             // Logic moved to worker

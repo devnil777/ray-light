@@ -16,7 +16,7 @@ import webview
 app = FastAPI()
 
 IMG_DIR = ""
-SETTINGS_FILE = "ray-light-settings.json"
+SETTINGS_FILE = ".ray-light.json"
 
 @app.get("/api/images")
 async def list_images() -> List[str]:
@@ -111,8 +111,9 @@ def main():
     t.start()
     time.sleep(1.5)
 
+    folder_name = os.path.basename(IMG_DIR.rstrip(os.sep))
     webview.create_window(
-        "Ray-Light | Аудит фото",
+        f"Ray-Light | Аудит фото — {folder_name}",
         f"http://127.0.0.1:{args.port}",
         width=1400,
         height=900,

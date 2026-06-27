@@ -109,8 +109,8 @@ const effects = {
 
     histogram: (imageData, params) => {
         const data = imageData.data;
-        const width = imageData.width;
-        const height = imageData.height;
+        const fullWidth = imageData.width;
+        const fullHeight = imageData.height;
 
         const histR = new Array(256).fill(0);
         const histG = new Array(256).fill(0);
@@ -130,67 +130,56 @@ const effects = {
 
         const max = Math.max(...histR, ...histG, ...histB, ...histL);
 
-        // Fill with dark gray
-        for (let i = 0; i < data.length; i += 4) {
-            data[i] = 30; data[i+1] = 30; data[i+2] = 30; data[i+3] = 255;
-        }
+        const maxDim = 500;
+        const s = Math.min(1, maxDim / Math.max(fullWidth, fullHeight));
+        const dispW = Math.round(fullWidth * s);
+        const dispH = Math.round(fullHeight * s);
 
-        const marginH = 60;
-        const marginV = 60;
-        const extraBottomMargin = 50;
-        const chartPadding = 15;
-        const boxGap = 38;
-        const availableWidth = width - 2 * marginH;
-        const availableHeight = height - marginV - (marginV + extraBottomMargin);
+        const offscreen = new OffscreenCanvas(dispW, dispH);
+        const hCtx = offscreen.getContext('2d');
+
+        hCtx.fillStyle = '#1e1e1e';
+        hCtx.fillRect(0, 0, dispW, dispH);
+
+        const marginH = Math.round(dispW * 0.02);
+        const marginV = Math.round(dispH * 0.02);
+        const extraBottomMargin = Math.round(dispH * 0.06);
+        const chartPadding = Math.round(dispH * 0.025);
+        const boxGap = Math.round(dispH * 0.01);
+        const availableWidth = dispW - 2 * marginH;
+        const availableHeight = dispH - marginV - (marginV + extraBottomMargin);
         const chartHeight = (availableHeight + boxGap) / 4;
 
-        const drawGraph = (hist, colorIdx, chartIdx) => {
-            // Calculate box position
+        const drawGraph = (hist, color, chartIdx) => {
+            const boxX = marginH;
             const boxY = marginV + chartIdx * chartHeight;
+            const boxW = availableWidth;
             const boxH = chartHeight - boxGap;
 
-            // Draw background box
-            for (let y = Math.floor(boxY); y < Math.floor(boxY + boxH); y++) {
-                for (let x = marginH; x < width - marginH; x++) {
-                    const idx = (y * width + x) * 4;
-                    data[idx] = 40; data[idx+1] = 40; data[idx+2] = 40; // Distinct grey box
-                }
-            }
+            hCtx.fillStyle = '#2a2a2a';
+            hCtx.fillRect(boxX, boxY, boxW, boxH);
 
-            // Draw bars
             const graphAreaH = boxH - 2 * chartPadding;
-            const graphAreaW = availableWidth - 2 * chartPadding;
-            const startX = marginH + chartPadding;
+            const graphAreaW = boxW - 2 * chartPadding;
+            const startX = boxX + chartPadding;
             const startY = boxY + boxH - chartPadding;
 
             for (let x = 0; x < 256; x++) {
                 const barHeight = (hist[x] / max) * graphAreaH;
-                const xPosStart = startX + Math.floor((x / 256) * graphAreaW);
-                const xPosEnd = startX + Math.floor(((x+1) / 256) * graphAreaW);
-                for (let px = xPosStart; px < xPosEnd; px++) {
-                    for (let py = 0; py < barHeight; py++) {
-                        const idx = (Math.floor(startY - py - 1) * width + px) * 4;
-                        if (idx >= 0 && idx < data.length) {
-                            if (colorIdx === -1) { // Luminance (White)
-                                data[idx] = 220; data[idx+1] = 220; data[idx+2] = 220;
-                            } else {
-                                data[idx + colorIdx] = 255;
-                                // Make non-active channels black to ensure color purity on the grey background
-                                data[idx + (colorIdx+1)%3] = 0;
-                                data[idx + (colorIdx+2)%3] = 0;
-                            }
-                        }
-                    }
+                if (barHeight > 0) {
+                    hCtx.fillStyle = color;
+                    const bw = graphAreaW / 256;
+                    hCtx.fillRect(startX + x * bw, startY - barHeight, Math.ceil(bw), barHeight);
                 }
             }
         };
 
-        drawGraph(histL, -1, 0);
-        drawGraph(histR, 0, 1);
-        drawGraph(histG, 1, 2);
-        drawGraph(histB, 2, 3);
+        drawGraph(histL, '#ddd', 0);
+        drawGraph(histR, '#ff0000', 1);
+        drawGraph(histG, '#00ff00', 2);
+        drawGraph(histB, '#0000ff', 3);
 
-        return { imageData, status: "Гистограмма (L, R, G, B)" };
+        return { imageData: hCtx.getImageData(0, 0, dispW, dispH), status: "Гистограмма (L, R, G, B)" };
     },
 
     itten_circle: (imageData, params) => {
@@ -207,19 +196,15 @@ const effects = {
             const b = data[i+2] / 255;
 
             const max = Math.max(r, g, b), min = Math.min(r, g, b);
-            if (max - min < 0.1) continue; // Skip neutral pixels
+            if (max - min < 0.1) continue;
 
             let h;
             if (max === min) h = 0;
             else if (max === r) h = (g - b) / (max - min) + (g < b ? 6 : 0);
             else if (max === g) h = (b - r) / (max - min) + 2;
             else h = (r - g) / (max - min) + 4;
-            h *= 60; // 0-360
+            h *= 60;
 
-            // Mapping hue to Itten's 12 sectors starting from Yellow (60)
-            // Order: Yellow, Yellow-Orange, Orange, Red-Orange, Red, Red-Violet,
-            // Violet, Blue-Violet, Blue, Blue-Green, Green, Yellow-Green
-            // Uniform mapping for simplicity, aligned to Itten's sectors.
             let ittenIdx = Math.floor(((60 - h + 360 + 15) % 360) / 30);
 
             if (ittenIdx >= 0 && ittenIdx < 12) {
@@ -230,58 +215,66 @@ const effects = {
 
         const percents = counts.map(c => total === 0 ? 0 : (c / total * 100).toFixed(1));
 
-        // Draw Circle
-        const centerX = width / 2;
-        const centerY = height / 2;
-        const radius = Math.min(width, height) * 0.4;
+        const maxDim = 500;
+        const s = Math.min(1, maxDim / Math.max(width, height));
+        const dispW = Math.round(width * s);
+        const dispH = Math.round(height * s);
 
-        for (let i = 0; i < data.length; i += 4) {
-            data[i] = 30; data[i+1] = 30; data[i+2] = 30; data[i+3] = 255;
-        }
+        const offscreen = new OffscreenCanvas(dispW, dispH);
+        const iCtx = offscreen.getContext('2d');
+
+        iCtx.fillStyle = '#1e1e1e';
+        iCtx.fillRect(0, 0, dispW, dispH);
+
+        const centerX = dispW / 2;
+        const centerY = dispH / 2;
+        const radius = Math.min(dispW, dispH) * 0.4;
 
         const ittenColors = [
-            [255, 255, 0],   // Жёлтый
-            [255, 200, 0],   // Жёлто-оранжевый
-            [255, 150, 0],   // Оранжевый
-            [255, 80, 0],    // Красно-оранжевый
-            [255, 0, 0],     // Красный
-            [200, 0, 100],   // Красно-фиолетовый
-            [130, 0, 200],   // Фиолетовый
-            [80, 0, 255],    // Сине-фиолетовый
-            [0, 0, 255],     // Синий
-            [0, 150, 200],   // Сине-зелёный
-            [0, 255, 0],     // Зелёный
-            [150, 255, 0]    // Жёлто-зелёный
+            [255, 255, 0], [255, 200, 0], [255, 150, 0], [255, 80, 0],
+            [255, 0, 0], [200, 0, 100], [130, 0, 200], [80, 0, 255],
+            [0, 0, 255], [0, 150, 200], [0, 255, 0], [150, 255, 0]
         ];
 
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
+        const ringData = iCtx.getImageData(0, 0, dispW, dispH);
+        const ringPixels = ringData.data;
+
+        for (let y = 0; y < dispH; y++) {
+            for (let x = 0; x < dispW; x++) {
                 const dx = x - centerX;
                 const dy = y - centerY;
                 const dist = Math.sqrt(dx*dx + dy*dy);
                 if (dist < radius && dist > radius * 0.5) {
-                    let angle = Math.atan2(dy, dx) * 180 / Math.PI; // -180 to 180
-                    angle = (angle + 90 + 360) % 360; // 0 is top, clockwise
-
+                    let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                    angle = (angle + 90 + 360) % 360;
                     const sector = Math.floor(angle / 30);
                     const color = ittenColors[sector];
-                    const idx = (y * width + x) * 4;
-                    data[idx] = color[0];
-                    data[idx+1] = color[1];
-                    data[idx+2] = color[2];
+                    const idx = (y * dispW + x) * 4;
+                    ringPixels[idx] = color[0];
+                    ringPixels[idx + 1] = color[1];
+                    ringPixels[idx + 2] = color[2];
+                    ringPixels[idx + 3] = 255;
                 }
             }
         }
 
-        // We can't easily draw text in pure ImageData without a font or manual pixel drawing.
-        // I will return the percentages in status and maybe draw simple bars or just rely on the status for now.
-        // But the user asked for "вписываем в него проценты".
-        // I'll try to draw a very simple 5x7 bitmap font for numbers if I have time,
-        // or just put them in the status string.
-        // Given I'm a "skilled engineer", I should probably try to make it look decent.
+        iCtx.putImageData(ringData, 0, 0);
+
+        const textRadius = Math.min(dispW, dispH) * 0.3;
+        iCtx.font = `bold ${Math.max(14, dispW / 35)}px Arial`;
+        iCtx.textAlign = 'center';
+        iCtx.textBaseline = 'middle';
+        for (let i = 0; i < 12; i++) {
+            const angle = (i * 30 + 15) * Math.PI / 180 - Math.PI / 2;
+            const tx = centerX + Math.cos(angle) * textRadius;
+            const ty = centerY + Math.sin(angle) * textRadius;
+            const bg = ittenColors[i];
+            iCtx.fillStyle = `rgb(${255 - bg[0]}, ${255 - bg[1]}, ${255 - bg[2]})`;
+            iCtx.fillText(percents[i] + '%', tx, ty);
+        }
 
         const statusStr = "Круг Иттена: " + percents.join("% ") + "%";
-        return { imageData, status: statusStr };
+        return { imageData: iCtx.getImageData(0, 0, dispW, dispH), status: statusStr };
     },
 
     texture_loss: (imageData, params) => {

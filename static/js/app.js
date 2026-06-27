@@ -345,9 +345,9 @@ class RayLightApp {
             let paramsHtml = '';
             def.params.forEach(p => {
                 paramsHtml += `
-                    <label>${p.name}</label>
+                    <label>${p.label || p.name}</label>
                     ${p.type === 'select'
-                        ? `<select data-param="${p.name}">${p.options.map(o => `<option value="${o}" ${eff.params[p.name] === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+                        ? `<select data-param="${p.name}">${p.options.map(o => `<option value="${o.value || o}" ${(eff.params[p.name] === (o.value || o)) ? 'selected' : ''}>${o.label || o}</option>`).join('')}</select>`
                         : `<input type="${p.type}" data-param="${p.name}" value="${eff.params[p.name]}" step="${p.step || 1}">`
                     }
                 `;
@@ -475,10 +475,6 @@ class RayLightApp {
             this.copyCanvas(cached.canvas, targetCanvas);
             if (statusEl) statusEl.textContent = cached.status + ' (кэш)';
 
-            if (effect.type === 'itten_circle' && (cached.status.includes('Круг Иттена:') || cached.status.includes('Itten Circle:'))) {
-                this.drawIttenPercentages(targetCanvas, cached.status);
-            }
-
             this.drawOverlay(effectIdx);
             this.applyTransform();
             this.updateUI();
@@ -511,10 +507,6 @@ class RayLightApp {
             if (generation !== this.navigationGeneration) return;
             this.copyCanvas(cached, targetCanvas);
             if (statusEl) statusEl.textContent = result.status;
-
-            if (effect.type === 'itten_circle' && result.status.includes('Круг Иттена:')) {
-                this.drawIttenPercentages(targetCanvas, result.status);
-            }
 
             this.drawOverlay(effectIdx);
             this.applyTransform();
@@ -661,7 +653,7 @@ class RayLightApp {
         }
 
         const effect = this.activeEffects[cellIndex];
-        if (effect && (effect.type === 'histogram' || effect.type === 'itten_circle')) {
+        if (effect && effects[effect.type]?.analysis) {
             overlay.width = 0;
             overlay.height = 0;
             return;
@@ -683,22 +675,11 @@ class RayLightApp {
         ctx.textBaseline = 'middle';
 
         switch (this.overlayGridType) {
-            case 'rule-of-thirds': this.drawRuleOfThirds(ctx, w, h); break;
             case 'grid': this.drawGridLines(ctx, w, h, this.overlayGridSize); break;
             case 'golden-ratio': this.drawGoldenRatio(ctx, w, h); break;
             case 'diagonal': this.drawDiagonal(ctx, w, h); break;
-            case 'triangle': this.drawTriangle(ctx, w, h); break;
             case 'golden-spiral': this.drawGoldenSpiral(ctx, w, h, this.overlaySpiralCorner); break;
         }
-    }
-
-    drawRuleOfThirds(ctx, w, h) {
-        ctx.beginPath();
-        ctx.moveTo(w / 3, 0); ctx.lineTo(w / 3, h);
-        ctx.moveTo(2 * w / 3, 0); ctx.lineTo(2 * w / 3, h);
-        ctx.moveTo(0, h / 3); ctx.lineTo(w, h / 3);
-        ctx.moveTo(0, 2 * h / 3); ctx.lineTo(w, 2 * h / 3);
-        ctx.stroke();
     }
 
     drawGridLines(ctx, w, h, n) {
@@ -729,16 +710,6 @@ class RayLightApp {
         ctx.beginPath();
         ctx.moveTo(0, 0); ctx.lineTo(w, h);
         ctx.moveTo(w, 0); ctx.lineTo(0, h);
-        ctx.stroke();
-    }
-
-    drawTriangle(ctx, w, h) {
-        ctx.beginPath();
-        ctx.moveTo(0, 0); ctx.lineTo(w, h);
-        ctx.moveTo(w, 0); ctx.lineTo(0, h);
-        // Lines from bottom corners to top midpoint
-        ctx.moveTo(0, h); ctx.lineTo(w / 2, 0);
-        ctx.moveTo(w, h); ctx.lineTo(w / 2, 0);
         ctx.stroke();
     }
 
@@ -841,37 +812,6 @@ class RayLightApp {
 
     // === End Overlay Grid Drawing ===
 
-    drawIttenPercentages(canvas, status) {
-        const ctx = canvas.getContext('2d');
-        const statusPart = status.split(': ')[1].split(' (')[0].trim();
-        const percents = statusPart.split('% ').map(s => s.replace('%', ''));
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radius = Math.min(canvas.width, canvas.height) * 0.3;
-
-        ctx.font = `bold ${Math.max(14, canvas.width / 35)}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        const ittenColors = [
-            [255, 255, 0], [255, 200, 0], [255, 150, 0], [255, 80, 0],
-            [255, 0, 0], [200, 0, 100], [130, 0, 200], [80, 0, 255],
-            [0, 0, 255], [0, 150, 200], [0, 255, 0], [150, 255, 0]
-        ];
-
-        for (let i = 0; i < 12; i++) {
-            const angle = (i * 30 + 15) * Math.PI / 180 - Math.PI / 2;
-            const x = centerX + Math.cos(angle) * radius;
-            const y = centerY + Math.sin(angle) * radius;
-
-            const bg = ittenColors[i];
-            const invR = 255 - bg[0], invG = 255 - bg[1], invB = 255 - bg[2];
-            ctx.fillStyle = `rgb(${invR}, ${invG}, ${invB})`;
-
-            ctx.fillText(`${percents[i]}%`, x, y);
-        }
-    }
-
     copyCanvas(src, dest) {
         dest.width = src.width;
         dest.height = src.height;
@@ -896,7 +836,7 @@ class RayLightApp {
             const overlay = document.getElementById(`overlay-${i}`);
             if (canvas) {
                 const effect = this.activeEffects[i];
-                const isAnalysis = effect && (effect.type === 'histogram' || effect.type === 'itten_circle');
+                const isAnalysis = effect && effects[effect.type]?.analysis;
 
                 if (isAnalysis || this.zoomMode === 'auto') {
                     const scaleX = containerWidth / canvas.width;
