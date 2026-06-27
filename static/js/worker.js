@@ -135,26 +135,47 @@ const effects = {
             data[i] = 30; data[i+1] = 30; data[i+2] = 30; data[i+3] = 255;
         }
 
-        const margin = 20;
-        const marginBottom = 40; // Extra margin for status bar
-        const availableWidth = width - 2 * margin;
-        const availableHeight = height - margin - marginBottom;
+        const marginH = 40; // Left/Right margin
+        const marginV = 40; // Top/Bottom margin
+        const chartPadding = 10; // Padding inside the background box
+        const availableWidth = width - 2 * marginH;
+        const availableHeight = height - 2 * marginV;
+        const chartHeight = availableHeight / 4;
 
-        const drawGraph = (hist, colorIdx, heightPercent, offsetPercent) => {
-            const h = availableHeight * heightPercent;
-            const yOffset = marginBottom + availableHeight * offsetPercent;
+        const drawGraph = (hist, colorIdx, chartIdx) => {
+            // Calculate box position
+            const boxY = marginV + chartIdx * chartHeight;
+            const boxH = chartHeight - 10; // Gap between boxes
+
+            // Draw background box
+            for (let y = Math.floor(boxY); y < Math.floor(boxY + boxH); y++) {
+                for (let x = marginH; x < width - marginH; x++) {
+                    const idx = (y * width + x) * 4;
+                    data[idx] = 45; data[idx+1] = 45; data[idx+2] = 45; // Slightly lighter than background
+                }
+            }
+
+            // Draw bars
+            const graphAreaH = boxH - 2 * chartPadding;
+            const graphAreaW = availableWidth - 2 * chartPadding;
+            const startX = marginH + chartPadding;
+            const startY = boxY + boxH - chartPadding;
+
             for (let x = 0; x < 256; x++) {
-                const barHeight = (hist[x] / max) * h;
-                const xPosStart = margin + Math.floor((x / 256) * availableWidth);
-                const xPosEnd = margin + Math.floor(((x+1) / 256) * availableWidth);
+                const barHeight = (hist[x] / max) * graphAreaH;
+                const xPosStart = startX + Math.floor((x / 256) * graphAreaW);
+                const xPosEnd = startX + Math.floor(((x+1) / 256) * graphAreaW);
                 for (let px = xPosStart; px < xPosEnd; px++) {
                     for (let py = 0; py < barHeight; py++) {
-                        const idx = (Math.floor(height - yOffset - py - 1) * width + px) * 4;
+                        const idx = (Math.floor(startY - py - 1) * width + px) * 4;
                         if (idx >= 0 && idx < data.length) {
                             if (colorIdx === -1) { // Luminance (White)
-                                data[idx] = 200; data[idx+1] = 200; data[idx+2] = 200;
+                                data[idx] = 220; data[idx+1] = 220; data[idx+2] = 220;
                             } else {
                                 data[idx + colorIdx] = 255;
+                                // Make non-active channels black to ensure color purity on the grey background
+                                data[idx + (colorIdx+1)%3] = 0;
+                                data[idx + (colorIdx+2)%3] = 0;
                             }
                         }
                     }
@@ -162,10 +183,10 @@ const effects = {
             }
         };
 
-        drawGraph(histL, -1, 0.2, 0.75);
-        drawGraph(histR, 0, 0.2, 0.50);
-        drawGraph(histG, 1, 0.2, 0.25);
-        drawGraph(histB, 2, 0.2, 0.0);
+        drawGraph(histL, -1, 0);
+        drawGraph(histR, 0, 1);
+        drawGraph(histG, 1, 2);
+        drawGraph(histB, 2, 3);
 
         return { imageData, status: "Гистограмма (L, R, G, B)" };
     },
