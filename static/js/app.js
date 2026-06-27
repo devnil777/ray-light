@@ -108,6 +108,9 @@ class RayLightApp {
         });
         window.addEventListener('mouseup', () => isResizing = false);
 
+        // Window resize
+        window.addEventListener('resize', () => this.updateGridSize());
+
         // Zoom & Pan
         this.els.gridContainer.addEventListener('wheel', (e) => {
             e.preventDefault();
@@ -222,6 +225,7 @@ class RayLightApp {
             `;
             this.els.gridContainer.appendChild(cell);
         }
+        this.updateGridSize();
         this.applyTransform();
     }
 
@@ -229,6 +233,11 @@ class RayLightApp {
         if (this.gridType === '1') return 1;
         const [w, h] = this.gridType.split('x').map(Number);
         return w * h;
+    }
+
+    getGridDimensions() {
+        if (this.gridType === '1') return [1, 1];
+        return this.gridType.split('x').map(Number);
     }
 
     addEffect(type) {
@@ -336,6 +345,13 @@ class RayLightApp {
         const filename = this.images[this.currentIndex];
         if (!filename) return;
 
+        // Load first image to get aspect ratio if needed
+        if (this.images.length > 0) {
+            const img = await this.loadImageFile(filename);
+            this.currentImageAspect = img.width / img.height;
+            this.updateGridSize();
+        }
+
         for (let i = 0; i < count; i++) {
             const canvas = document.getElementById(`canvas-${i}`);
             const status = document.getElementById(`status-${i}`);
@@ -440,6 +456,37 @@ class RayLightApp {
                 taskId: task.taskId
             }, [task.imageData.data.buffer]);
         }
+    }
+
+    updateGridSize() {
+        if (!this.currentImageAspect) return;
+
+        const [cols, rows] = this.getGridDimensions();
+        const gridAspect = (this.currentImageAspect * cols) / rows;
+
+        const workspace = this.els.workspace;
+        const statusBar = document.getElementById('status-bar');
+        const availableWidth = workspace.clientWidth - 20; // 10px padding * 2
+        const availableHeight = workspace.clientHeight - statusBar.clientHeight - 20;
+
+        const workspaceAspect = availableWidth / availableHeight;
+
+        let gridWidth, gridHeight;
+
+        if (gridAspect > workspaceAspect) {
+            // Grid is wider than workspace -> side margins
+            gridWidth = availableWidth;
+            gridHeight = availableWidth / gridAspect;
+        } else {
+            // Grid is taller than workspace -> top/bottom margins
+            gridHeight = availableHeight;
+            gridWidth = availableHeight * gridAspect;
+        }
+
+        this.els.gridContainer.style.width = `${gridWidth}px`;
+        this.els.gridContainer.style.height = `${gridHeight}px`;
+        this.els.gridContainer.style.flex = 'none';
+        this.els.gridContainer.style.margin = 'auto';
     }
 
     handleWorkerMessage(data) {
